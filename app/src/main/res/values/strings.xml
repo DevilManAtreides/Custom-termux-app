@@ -235,4 +235,36 @@
     <!-- Donate Preference -->
     <string name="donate_preference_title">Donate</string>
 
+    <!-- Appearance Preferences -->
+    <string name="termux_appearance_preferences_title">Appearance</string>
+    <string name="termux_appearance_preferences_summary">Wallpaper, blur, fonts and color themes</string>
+
+    <string name="termux_appearance_wallpaper_header">Wallpaper</string>
+    <string name="termux_appearance_wallpaper_enabled_title">Show wallpaper</string>
+    <string name="termux_appearance_wallpaper_enabled_summary">Draw an image behind the terminal text</string>
+    <string name="termux_appearance_wallpaper_pick_title">Choose wallpaper image</string>
+    <string name="termux_appearance_wallpaper_pick_summary_none">No image selected</string>
+    <string name="termux_appearance_wallpaper_pick_summary_set">Tap to pick a different image</string>
+    <string name="termux_appearance_wallpaper_blur_title">Blur</string>
+    <string name="termux_appearance_wallpaper_dim_title">Dim</string>
+    <string name="termux_appearance_wallpaper_remove_title">Remove wallpaper</string>
+    <string name="termux_appearance_wallpaper_import_failed">Could not use that image</string>
+
+    <string name="termux_appearance_font_header">Font</string>
+    <string name="termux_appearance_font_pick_title">Choose font file</string>
+    <string name="termux_appearance_font_pick_summary_default">Using the default monospace font. Pick a .ttf or .otf file.</string>
+    <string name="termux_appearance_font_pick_summary_custom">Using a custom font. Tap to pick a different one.</string>
+    <string name="termux_appearance_font_reset_title">Reset to default font</string>
+    <string name="termux_appearance_font_import_failed">That is not a usable font file</string>
+
+    <string name="termux_appearance_theme_header">Colors</string>
+    <string name="termux_appearance_theme_preset_title">Color theme</string>
+    <string name="termux_appearance_theme_default">Termux default</string>
+    <string name="termux_appearance_theme_custom">Custom colors</string>
+    <string name="termux_appearance_custom_colors_title">Edit colors</string>
+    <string name="termux_appearance_custom_colors_summary">Foreground, background, cursor and the 16 ANSI colors</string>
+    <string name="termux_appearance_colors_reset_title">Reset colors to default</string>
+    <string name="termux_appearance_colors_invalid">Use the format #rrggbb</string>
+    <string name="termux_appearance_colors_header">Colors (hex, #rrggbb)</string>
+
 </resources>

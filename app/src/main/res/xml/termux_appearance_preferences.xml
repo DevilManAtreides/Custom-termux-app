@@ -1,0 +1,79 @@
+<PreferenceScreen
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        app:key="wallpaper"
+        app:title="@string/termux_appearance_wallpaper_header">
+
+        <SwitchPreferenceCompat
+            app:key="wallpaper_enabled"
+            app:defaultValue="false"
+            app:title="@string/termux_appearance_wallpaper_enabled_title"
+            app:summary="@string/termux_appearance_wallpaper_enabled_summary" />
+
+        <Preference
+            app:key="wallpaper_pick"
+            app:persistent="false"
+            app:title="@string/termux_appearance_wallpaper_pick_title" />
+
+        <SeekBarPreference
+            app:key="wallpaper_blur"
+            app:defaultValue="0"
+            app:min="0"
+            android:max="40"
+            app:seekBarIncrement="1"
+            app:showSeekBarValue="true"
+            app:title="@string/termux_appearance_wallpaper_blur_title" />
+
+        <SeekBarPreference
+            app:key="wallpaper_dim"
+            app:defaultValue="30"
+            app:min="0"
+            android:max="90"
+            app:seekBarIncrement="5"
+            app:showSeekBarValue="true"
+            app:title="@string/termux_appearance_wallpaper_dim_title" />
+
+        <Preference
+            app:key="wallpaper_remove"
+            app:persistent="false"
+            app:title="@string/termux_appearance_wallpaper_remove_title" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:key="font"
+        app:title="@string/termux_appearance_font_header">
+
+        <Preference
+            app:key="font_pick"
+            app:persistent="false"
+            app:title="@string/termux_appearance_font_pick_title" />
+
+        <Preference
+            app:key="font_reset"
+            app:persistent="false"
+            app:title="@string/termux_appearance_font_reset_title" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:key="colors"
+        app:title="@string/termux_appearance_theme_header">
+
+        <!-- Entries are filled in from the bundled presets by AppearancePreferencesFragment. -->
+        <ListPreference
+            app:key="theme_preset"
+            app:defaultValue="default"
+            app:title="@string/termux_appearance_theme_preset_title" />
+
+        <Preference
+            app:key="custom_colors"
+            app:title="@string/termux_appearance_custom_colors_title"
+            app:summary="@string/termux_appearance_custom_colors_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.ColorsPreferencesFragment" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

@@ -528,9 +528,22 @@ public final class TerminalView extends View {
         return true;
     }
 
+    /**
+     * Set when something (like a wallpaper) is drawn behind this view. The renderer skips cells that
+     * use the default background, so the view must not claim to be opaque or the area behind it
+     * may not be redrawn correctly.
+     */
+    private boolean mHasContentBehind = false;
+
+    public void setHasContentBehind(boolean hasContentBehind) {
+        if (mHasContentBehind == hasContentBehind) return;
+        mHasContentBehind = hasContentBehind;
+        invalidate();
+    }
+
     @Override
     public boolean isOpaque() {
-        return true;
+        return !mHasContentBehind;
     }
 
     /**

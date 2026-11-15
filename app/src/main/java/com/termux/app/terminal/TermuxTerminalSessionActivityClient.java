@@ -11,6 +11,7 @@ import android.graphics.Typeface;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
 import android.text.TextUtils;
+import android.widget.ImageView;
 import android.widget.ListView;
 
 import androidx.annotation.NonNull;
@@ -21,6 +22,7 @@ import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
 import com.termux.app.TermuxActivity;
+import com.termux.app.appearance.AppearanceManager;
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.app.TermuxService;
@@ -50,6 +52,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     private static final String LOG_TAG = "TermuxTerminalSessionActivityClient";
 
+    /** Appearance settings version last applied, see {@link AppearanceManager#getStyleVersion}. */
+    private long mLastStyleVersion = -1;
+
     public TermuxTerminalSessionActivityClient(TermuxActivity activity) {
         this.mActivity = activity;
     }
@@ -66,6 +71,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      * Should be called when mActivity.onStart() is called
      */
     public void onStart() {
+        // The Appearance settings screen is a separate activity, so pick up any wallpaper, font or
+        // color changes made there when we come back to the foreground.
+        if (AppearanceManager.getStyleVersion(mActivity) != mLastStyleVersion) {
+            checkForFontAndColors();
+        }
+
         // The service has connected, but data may have changed since we were last in the foreground.
         // Get the session stored in shared preferences stored by {@link #onStop} if its valid,
         // otherwise get the last session currently running.
@@ -512,6 +523,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
             final Typeface newTypeface = (fontFile.exists() && fontFile.length() > 0) ? Typeface.createFromFile(fontFile) : Typeface.MONOSPACE;
             mActivity.getTerminalView().setTypeface(newTypeface);
+
+            mLastStyleVersion = AppearanceManager.getStyleVersion(mActivity);
+            mActivity.getTerminalView().setHasContentBehind(AppearanceManager.isWallpaperEnabled(mActivity));
+            AppearanceManager.applyWallpaper(mActivity, (ImageView) mActivity.findViewById(R.id.terminal_wallpaper_view));
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in checkForFontAndColors()", e);
         }
