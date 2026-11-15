@@ -265,6 +265,16 @@
     <string name="termux_appearance_custom_colors_summary">Foreground, background, cursor and the 16 ANSI colors</string>
     <string name="termux_appearance_colors_reset_title">Reset colors to default</string>
     <string name="termux_appearance_colors_invalid">Use the format #rrggbb</string>
-    <string name="termux_appearance_colors_header">Colors (hex, #rrggbb)</string>
+    <string name="termux_appearance_colors_header">Tap a color to change it</string>
+
+    <string name="termux_appearance_colors_save_failed">Could not save the color</string>
+
+    <string name="termux_appearance_ui_header">Settings look</string>
+    <string name="termux_appearance_ui_mode_title">Settings color</string>
+    <string name="termux_appearance_ui_color_title">Custom settings color</string>
+    <string name="termux_appearance_ui_color_summary">Color of the top bar and of switches and sliders. Used when Settings color is Custom color.</string>
+    <string name="termux_appearance_ui_color_description">Top bar color for the Settings screens. Switches and sliders use it too.</string>
+
+    <string name="termux_appearance_picker_brightness">Brightness</string>
 
 </resources>

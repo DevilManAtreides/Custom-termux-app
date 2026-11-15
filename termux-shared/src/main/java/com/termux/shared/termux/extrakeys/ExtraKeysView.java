@@ -411,6 +411,9 @@ public final class ExtraKeysView extends GridLayout {
 
                 button.setText(buttonInfo.getDisplay());
                 button.setTextColor(mButtonTextColor);
+                // Start in the same state a button returns to when released, so a key that has
+                // never been pressed looks identical to one that has.
+                button.setBackgroundColor(mButtonBackgroundColor);
                 button.setAllCaps(mButtonTextAllCaps);
                 button.setPadding(0, 0, 0, 0);
 

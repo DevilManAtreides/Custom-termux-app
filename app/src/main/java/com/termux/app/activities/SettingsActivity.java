@@ -10,6 +10,7 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
 import com.termux.R;
+import com.termux.app.appearance.SettingsStyler;
 import com.termux.shared.activities.ReportActivity;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.models.ReportInfo;
@@ -44,6 +45,10 @@ public class SettingsActivity extends AppCompatActivity {
 
         AppCompatActivityUtils.setToolbar(this, com.termux.shared.R.id.toolbar);
         AppCompatActivityUtils.setShowBackButtonInActionBar(this, true);
+
+        // Top bar, status bar and switch/slider colors, see Settings > Termux > Appearance.
+        SettingsStyler.apply(this);
+        SettingsStyler.installFragmentTinting(this);
     }
 
     @Override

@@ -19,8 +19,13 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.TermuxActivity;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.shared.theme.ThemeUtils;
+import com.termux.terminal.TerminalColors;
+import com.termux.terminal.TextStyle;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -55,6 +60,10 @@ public final class AppearanceManager {
     public static final String KEY_WALLPAPER_BLUR = "wallpaper_blur";
     public static final String KEY_WALLPAPER_DIM = "wallpaper_dim";
     public static final String KEY_THEME_PRESET = "theme_preset";
+    /** How the Settings screens are colored: see {@link SettingsStyler#MODE_TERMINAL} and friends. */
+    public static final String KEY_UI_MODE = "ui_style_mode";
+    /** {@code #rrggbb} used when {@link #KEY_UI_MODE} is {@link SettingsStyler#MODE_CUSTOM}. */
+    public static final String KEY_UI_COLOR = "ui_custom_color";
     /** Bumped whenever anything changes, so the terminal activity knows to re-apply on return. */
     public static final String KEY_STYLE_VERSION = "style_version";
 
@@ -187,6 +196,7 @@ public final class AppearanceManager {
         if (toolbar != null) {
             toolbar.setBackgroundColor(enabled ? 0x99000000 : Color.BLACK);
         }
+        applyExtraKeysStyle(activity);
 
         if (!enabled) {
             sAppliedKey = null;
@@ -234,6 +244,52 @@ public final class AppearanceManager {
                 });
             }
         });
+    }
+
+    /**
+     * Makes the extra keys' resting background match the bar behind them.
+     *
+     * The keys start out transparent but go back to the theme's solid black every time one is
+     * released. Over a translucent bar that makes every key you have touched look different
+     * (pressed in) from the ones you have not, so with a wallpaper the resting color is
+     * transparent too. Without one it is the theme color, exactly as stock Termux.
+     * Safe to call before the extra keys exist: it does nothing until they do.
+     */
+    public static void applyExtraKeysStyle(@NonNull Activity activity) {
+        if (!(activity instanceof TermuxActivity)) return;
+        ExtraKeysView keys = ((TermuxActivity) activity).getExtraKeysView();
+        if (keys == null) return;
+
+        int resting = isWallpaperEnabled(activity)
+            ? Color.TRANSPARENT
+            : ThemeUtils.getSystemAttrColor(activity, ExtraKeysView.ATTR_BUTTON_BACKGROUND_COLOR,
+                ExtraKeysView.DEFAULT_BUTTON_BACKGROUND_COLOR);
+
+        keys.setButtonBackgroundColor(resting);
+        for (int i = 0; i < keys.getChildCount(); i++) {
+            keys.getChildAt(i).setBackgroundColor(resting);
+        }
+    }
+
+    // ---------------------------------------------------------------- color lookups
+
+    /** The terminal's built-in color for a colors.properties key, as {@code #rrggbb}. */
+    @NonNull
+    public static String defaultColorHex(@NonNull String key) {
+        int index;
+        if (key.equals("foreground")) index = TextStyle.COLOR_INDEX_FOREGROUND;
+        else if (key.equals("background")) index = TextStyle.COLOR_INDEX_BACKGROUND;
+        else if (key.equals("cursor")) index = TextStyle.COLOR_INDEX_CURSOR;
+        else index = Integer.parseInt(key.substring("color".length()));
+        return ColorMath.toHex(TerminalColors.COLOR_SCHEME.mDefaultColors[index]);
+    }
+
+    /** The color the terminal uses for a key: from colors.properties if set there, else the built-in one. */
+    @NonNull
+    public static String getEffectiveColorHex(@NonNull String key) {
+        String fromFile = readColorProperties().getProperty(key);
+        Integer parsed = ColorMath.parseHex(fromFile);
+        return parsed != null ? ColorMath.toHex(parsed) : defaultColorHex(key);
     }
 
     private static Bitmap blurScaled(Bitmap src, int radius) {

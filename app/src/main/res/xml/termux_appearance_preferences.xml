@@ -76,4 +76,24 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory
+        app:key="ui"
+        app:title="@string/termux_appearance_ui_header">
+
+        <ListPreference
+            app:key="ui_style_mode"
+            app:defaultValue="terminal"
+            app:entries="@array/termux_appearance_ui_mode_entries"
+            app:entryValues="@array/termux_appearance_ui_mode_values"
+            app:title="@string/termux_appearance_ui_mode_title"
+            app:useSimpleSummaryProvider="true" />
+
+        <Preference
+            app:key="ui_custom_color"
+            app:persistent="false"
+            app:title="@string/termux_appearance_ui_color_title"
+            app:summary="@string/termux_appearance_ui_color_summary" />
+
+    </PreferenceCategory>
+
 </PreferenceScreen>

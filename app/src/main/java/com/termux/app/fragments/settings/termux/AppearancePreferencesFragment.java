@@ -17,6 +17,9 @@ import androidx.preference.SwitchPreferenceCompat;
 
 import com.termux.R;
 import com.termux.app.appearance.AppearanceManager;
+import com.termux.app.appearance.ColorMath;
+import com.termux.app.appearance.ColorPickerDialog;
+import com.termux.app.appearance.SettingsStyler;
 
 import java.util.ArrayList;
 import java.util.Locale;
@@ -55,6 +58,7 @@ public class AppearancePreferencesFragment extends PreferenceFragmentCompat {
         setUpWallpaper();
         setUpFont();
         setUpTheme();
+        setUpUiStyle();
     }
 
     @Override
@@ -62,6 +66,7 @@ public class AppearancePreferencesFragment extends PreferenceFragmentCompat {
         super.onResume();
         // The custom colors screen may have changed the theme while we were in the background.
         refreshThemeSummary();
+        refreshUiStyle();
         refreshWallpaperSummary();
         refreshFontSummary();
     }
@@ -269,6 +274,84 @@ public class AppearancePreferencesFragment extends PreferenceFragmentCompat {
         } else {
             preset.setSummary(prettify(value));
         }
+    }
+
+    // ---------------------------------------------------------------- settings look
+
+    private void setUpUiStyle() {
+        ListPreference mode = findPreference(AppearanceManager.KEY_UI_MODE);
+        if (mode != null) {
+            mode.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+                @Override
+                public boolean onPreferenceChange(Preference preference, Object newValue) {
+                    refreshUiStyleEnabled((String) newValue);
+                    recreateSoon();
+                    return true;
+                }
+            });
+        }
+
+        Preference color = findPreference(AppearanceManager.KEY_UI_COLOR);
+        if (color != null) {
+            color.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
+                @Override
+                public boolean onPreferenceClick(Preference preference) {
+                    Integer current = ColorMath.parseHex(currentUiColorHex());
+                    ColorPickerDialog.show(requireContext(),
+                        getString(R.string.termux_appearance_ui_color_title),
+                        getString(R.string.termux_appearance_ui_color_description),
+                        current != null ? current : 0xFF5C6BC0,
+                        new ColorPickerDialog.Callback() {
+                            @Override
+                            public void onColorSelected(int rgb) {
+                                AppearanceManager.getPrefs(requireContext()).edit()
+                                    .putString(AppearanceManager.KEY_UI_COLOR, ColorMath.toHex(rgb)).apply();
+                                refreshUiStyle();
+                                recreateSoon();
+                            }
+                        });
+                    return true;
+                }
+            });
+        }
+        refreshUiStyle();
+    }
+
+    private String currentUiColorHex() {
+        return AppearanceManager.getPrefs(requireContext())
+            .getString(AppearanceManager.KEY_UI_COLOR, SettingsStyler.DEFAULT_CUSTOM_COLOR);
+    }
+
+    private void refreshUiStyle() {
+        if (getContext() == null) return;
+        refreshUiStyleEnabled(AppearanceManager.getPrefs(requireContext())
+            .getString(AppearanceManager.KEY_UI_MODE, SettingsStyler.MODE_TERMINAL));
+    }
+
+    /** The custom color only matters in Custom mode. */
+    private void refreshUiStyleEnabled(@Nullable String mode) {
+        Preference color = findPreference(AppearanceManager.KEY_UI_COLOR);
+        if (color == null) return;
+        boolean custom = SettingsStyler.MODE_CUSTOM.equals(mode);
+        color.setEnabled(custom);
+        color.setSummary(custom
+            ? currentUiColorHex()
+            : getString(R.string.termux_appearance_ui_color_summary));
+    }
+
+    /**
+     * Restarts the Settings screen so the new colors are applied everywhere. Posted so the changed
+     * preference has been saved first.
+     */
+    private void recreateSoon() {
+        final androidx.fragment.app.FragmentActivity activity = getActivity();
+        if (activity == null) return;
+        activity.getWindow().getDecorView().post(new Runnable() {
+            @Override
+            public void run() {
+                if (!activity.isFinishing()) activity.recreate();
+            }
+        });
     }
 
     /** "tokyo_night" -> "Tokyo Night". */

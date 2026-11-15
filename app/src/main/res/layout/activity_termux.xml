@@ -29,7 +29,7 @@
                 android:layout_height="match_parent">
 
                 <!-- Optional wallpaper, shown behind the terminal. Hidden unless enabled in Appearance settings. -->
-                <ImageView
+                <com.termux.app.appearance.StableWallpaperView
                     android:id="@+id/terminal_wallpaper_view"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
