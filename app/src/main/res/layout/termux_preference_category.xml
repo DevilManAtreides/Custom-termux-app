@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Section header on every settings screen (Wallpaper, Font, Colors, ...). Set on each
+     PreferenceCategory by SettingsStyler.polishPreferences, which also colors it with the
+     accent through the tag below. Only the views Preference binds (the title) are needed. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/title"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="24dp"
+    android:paddingBottom="8dp"
+    android:tag="termux_category_title"
+    android:textColor="?android:attr/textColorPrimary"
+    android:textSize="18sp"
+    android:textStyle="bold"
+    android:focusable="false"
+    android:clickable="false" />

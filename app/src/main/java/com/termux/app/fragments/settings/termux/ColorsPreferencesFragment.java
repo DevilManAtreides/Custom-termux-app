@@ -17,6 +17,7 @@ import com.termux.R;
 import com.termux.app.appearance.AppearanceManager;
 import com.termux.app.appearance.ColorMath;
 import com.termux.app.appearance.ColorPickerDialog;
+import com.termux.app.appearance.SettingsStyler;
 
 import java.util.ArrayList;
 import java.util.Map;
@@ -101,6 +102,7 @@ public class ColorsPreferencesFragment extends PreviewPreferenceFragment {
                     PreferenceScreen s = getPreferenceScreen();
                     s.removeAll();
                     build(s);
+                    SettingsStyler.polishPreferences(s);
                 }
                 return true;
             }

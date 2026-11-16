@@ -33,7 +33,7 @@ import java.util.concurrent.Executors;
 public class AppearancePreviewView extends View {
 
     private static final int COLS = 40;
-    private static final int ROWS = 12;
+    private static final int ROWS = 13;
     /** Same working size the real wallpaper is blurred at, so the blur looks proportionally the same. */
     private static final int BLUR_WORKING_DIMENSION = 720;
 
@@ -241,15 +241,19 @@ public class AppearancePreviewView extends View {
             grid.fill(row, col, 5, withAlpha(color, mCellAlpha));
             grid.textColor(row, col + 1, "c" + i, ColorMath.readableOn(color));
         }
-        // 9: a highlighted bar, like htop's selected row
+        // 9: a colored bar, like htop's highlighted row. Follows the opacity setting.
         int bar = mColors[3 + 4] | 0xFF000000;
         grid.fill(9, 0, COLS, withAlpha(bar, mCellAlpha));
-        grid.textColor(9, 1, "selected row (colored background)", ColorMath.readableOn(bar));
-        // 10: glyph test for the font
-        grid.text(10, 0, "The quick brown fox 0O 1lI {}[]<>", FOREGROUND);
-        // 11: prompt with the cursor
-        grid.text(11, 0, "~ $ vim", FOREGROUND);
-        grid.fill(11, 7, 1, mColors[2] | 0xFF000000);
+        grid.textColor(9, 1, "colored bar (follows opacity)", ColorMath.readableOn(bar));
+        // 10: selected text. The real terminal draws a selection as the foreground color with the
+        // text in the background color, and always solid, so the opacity setting does not apply.
+        grid.fill(10, 0, COLS, mColors[0] | 0xFF000000);
+        grid.textColor(10, 1, "selected text (always solid)", mColors[1] | 0xFF000000);
+        // 11: glyph test for the font
+        grid.text(11, 0, "The quick brown fox 0O 1lI {}[]<>", FOREGROUND);
+        // 12: prompt with the cursor
+        grid.text(12, 0, "~ $ vim", FOREGROUND);
+        grid.fill(12, 7, 1, mColors[2] | 0xFF000000);
     }
 
     private int withAlpha(int rgb, int alpha) {

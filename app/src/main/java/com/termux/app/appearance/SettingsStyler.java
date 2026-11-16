@@ -8,17 +8,23 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.SeekBar;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
+import androidx.preference.Preference;
+import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceFragmentCompat;
+import androidx.preference.PreferenceGroup;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.termux.R;
 import com.termux.shared.theme.ThemeUtils;
 
 /**
@@ -130,14 +136,43 @@ public final class SettingsStyler {
         }
     }
 
+    /** Tag set on the section header layout, see res/layout/termux_preference_category.xml. */
+    private static final String CATEGORY_TITLE_TAG = "termux_category_title";
+
     /**
-     * Tints switches and sliders on every preference screen shown in this activity, including
-     * screens opened later. The accent is read once here; changing the style recreates the activity.
+     * Tidies a preference screen: removes the empty icon gutter on the left of items that have no
+     * icon, and gives every section header the larger bold header layout. Safe to call more than once.
+     */
+    public static void polishPreferences(@Nullable PreferenceGroup group) {
+        if (group == null) return;
+        for (int i = 0; i < group.getPreferenceCount(); i++) {
+            Preference preference = group.getPreference(i);
+            if (preference.getIcon() == null) preference.setIconSpaceReserved(false);
+            if (preference instanceof PreferenceCategory) {
+                preference.setLayoutResource(R.layout.termux_preference_category);
+            }
+            if (preference instanceof PreferenceGroup) polishPreferences((PreferenceGroup) preference);
+        }
+    }
+
+    /**
+     * Tints switches and sliders and colors section headers on every preference screen shown in this
+     * activity, including screens opened later, and applies {@link #polishPreferences} to each. The
+     * accent is read once here; changing the style recreates the activity.
      */
     public static void installFragmentTinting(@NonNull AppCompatActivity activity) {
         final int accent = resolve(activity).accent;
         activity.getSupportFragmentManager().registerFragmentLifecycleCallbacks(
             new FragmentManager.FragmentLifecycleCallbacks() {
+                @Override
+                public void onFragmentCreated(@NonNull FragmentManager fm, @NonNull Fragment f,
+                                              android.os.Bundle savedInstanceState) {
+                    // Runs after the fragment has loaded its preferences but before anything is drawn.
+                    if (f instanceof PreferenceFragmentCompat) {
+                        polishPreferences(((PreferenceFragmentCompat) f).getPreferenceScreen());
+                    }
+                }
+
                 @Override
                 public void onFragmentViewCreated(@NonNull FragmentManager fm, @NonNull Fragment f,
                                                   @NonNull View v, android.os.Bundle savedInstanceState) {
@@ -159,7 +194,9 @@ public final class SettingsStyler {
     }
 
     public static void tintTree(@NonNull View view, int accent) {
-        if (view instanceof SwitchCompat) {
+        if (view instanceof TextView && CATEGORY_TITLE_TAG.equals(view.getTag())) {
+            ((TextView) view).setTextColor(accent);
+        } else if (view instanceof SwitchCompat) {
             SwitchCompat sw = (SwitchCompat) view;
             int[][] states = {{android.R.attr.state_checked}, {}};
             sw.setThumbTintList(new ColorStateList(states, new int[]{accent, 0xFFBDBDBD}));
