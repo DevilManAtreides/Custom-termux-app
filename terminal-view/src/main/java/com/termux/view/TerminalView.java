@@ -541,6 +541,16 @@ public final class TerminalView extends View {
         invalidate();
     }
 
+    /** Opacity (0 to 255) of colored cell backgrounds, see {@link TerminalRenderer#mCellBackgroundAlpha}. */
+    private int mCellBackgroundAlpha = 255;
+
+    public void setCellBackgroundAlpha(int alpha) {
+        alpha = Math.max(0, Math.min(255, alpha));
+        if (mCellBackgroundAlpha == alpha) return;
+        mCellBackgroundAlpha = alpha;
+        invalidate();
+    }
+
     @Override
     public boolean isOpaque() {
         return !mHasContentBehind;
@@ -1042,6 +1052,7 @@ public final class TerminalView extends View {
                 mTextSelectionCursorController.getSelectors(sel);
             }
 
+            mRenderer.mCellBackgroundAlpha = mCellBackgroundAlpha;
             mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3]);
 
             // render the text selection handles

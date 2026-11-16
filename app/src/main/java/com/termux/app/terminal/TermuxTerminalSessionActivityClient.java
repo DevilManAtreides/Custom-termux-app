@@ -526,6 +526,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
             mLastStyleVersion = AppearanceManager.getStyleVersion(mActivity);
             mActivity.getTerminalView().setHasContentBehind(AppearanceManager.isWallpaperEnabled(mActivity));
+            mActivity.getTerminalView().setCellBackgroundAlpha(AppearanceManager.getCellBackgroundAlpha(mActivity));
             AppearanceManager.applyWallpaper(mActivity, (ImageView) mActivity.findViewById(R.id.terminal_wallpaper_view));
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in checkForFontAndColors()", e);

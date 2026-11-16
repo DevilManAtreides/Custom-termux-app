@@ -6,6 +6,11 @@
         app:fragment="com.termux.app.fragments.settings.termux.AppearancePreferencesFragment"/>
 
     <Preference
+        app:title="@string/termux_behavior_preferences_title"
+        app:summary="@string/termux_behavior_preferences_summary"
+        app:fragment="com.termux.app.fragments.settings.termux.BehaviorPreferencesFragment"/>
+
+    <Preference
         app:title="@string/termux_debugging_preferences_title"
         app:summary="@string/termux_debugging_preferences_summary"
         app:fragment="com.termux.app.fragments.settings.termux.DebuggingPreferencesFragment"/>

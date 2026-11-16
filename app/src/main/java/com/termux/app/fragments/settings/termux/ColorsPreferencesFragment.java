@@ -28,7 +28,7 @@ import java.util.TreeMap;
  * currently installed.
  */
 @Keep
-public class ColorsPreferencesFragment extends PreferenceFragmentCompat {
+public class ColorsPreferencesFragment extends PreviewPreferenceFragment {
 
     /** Colors as stored in colors.properties; only keys the user or a preset set are present. */
     private final Map<String, String> mColors = new TreeMap<>();

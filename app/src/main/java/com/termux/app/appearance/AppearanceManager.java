@@ -59,11 +59,15 @@ public final class AppearanceManager {
     public static final String KEY_WALLPAPER_ENABLED = "wallpaper_enabled";
     public static final String KEY_WALLPAPER_BLUR = "wallpaper_blur";
     public static final String KEY_WALLPAPER_DIM = "wallpaper_dim";
+    /** How solid colored cell backgrounds are while a wallpaper is showing, 0 to 100 percent. */
+    public static final String KEY_CELL_OPACITY = "cell_opacity";
     public static final String KEY_THEME_PRESET = "theme_preset";
-    /** How the Settings screens are colored: see {@link SettingsStyler#MODE_TERMINAL} and friends. */
+    /** How the Settings screens are colored: {@link SettingsStyler#MODE_TERMINAL} or {@link SettingsStyler#MODE_CUSTOM}. */
     public static final String KEY_UI_MODE = "ui_style_mode";
     /** {@code #rrggbb} used when {@link #KEY_UI_MODE} is {@link SettingsStyler#MODE_CUSTOM}. */
     public static final String KEY_UI_COLOR = "ui_custom_color";
+    /** Whether tapping the terminal brings the keyboard back while a mouse-aware program (vim, htop) is running. */
+    public static final String KEY_KEYBOARD_ON_TAP_IN_MOUSE_APPS = "keyboard_on_tap_in_mouse_apps";
     /** Bumped whenever anything changes, so the terminal activity knows to re-apply on return. */
     public static final String KEY_STYLE_VERSION = "style_version";
 
@@ -86,6 +90,11 @@ public final class AppearanceManager {
 
     public static SharedPreferences getPrefs(@NonNull Context context) {
         return context.getApplicationContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+    }
+
+    /** On by default: the keyboard comes back on tap in vim, htop and the like. */
+    public static boolean isKeyboardOnTapInMouseAppsEnabled(@NonNull Context context) {
+        return getPrefs(context).getBoolean(KEY_KEYBOARD_ON_TAP_IN_MOUSE_APPS, true);
     }
 
     public static long getStyleVersion(@NonNull Context context) {
@@ -271,7 +280,34 @@ public final class AppearanceManager {
         }
     }
 
+    /**
+     * Alpha (0 to 255) for colored cell backgrounds in the terminal. Always fully solid when there is
+     * no wallpaper, because with nothing behind the terminal, see-through cells would just look dim.
+     */
+    public static int getCellBackgroundAlpha(@NonNull Context context) {
+        if (!isWallpaperEnabled(context)) return 255;
+        return ColorMath.percentToAlpha(getPrefs(context).getInt(KEY_CELL_OPACITY, 100));
+    }
+
     // ---------------------------------------------------------------- color lookups
+
+    /**
+     * Every editable color as opaque 0xFFRRGGBB, in the order of {@link #getColorKeys()}: colors.properties
+     * values where set, the built-in ones elsewhere. Reads the file once, so use this for bulk lookups.
+     */
+    @NonNull
+    public static int[] getEffectiveColors() {
+        Properties props = readColorProperties();
+        ArrayList<String> keys = getColorKeys();
+        int[] colors = new int[keys.size()];
+        for (int i = 0; i < colors.length; i++) {
+            String key = keys.get(i);
+            Integer parsed = ColorMath.parseHex(props.getProperty(key));
+            if (parsed == null) parsed = ColorMath.parseHex(defaultColorHex(key));
+            colors[i] = parsed != null ? parsed : 0xFF000000;
+        }
+        return colors;
+    }
 
     /** The terminal's built-in color for a colors.properties key, as {@code #rrggbb}. */
     @NonNull

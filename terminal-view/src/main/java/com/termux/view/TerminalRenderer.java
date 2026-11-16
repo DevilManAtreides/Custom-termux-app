@@ -37,6 +37,13 @@ public final class TerminalRenderer {
 
     private final float[] asciiMeasures = new float[127];
 
+    /**
+     * Opacity (0 to 255) of cell backgrounds that are not the terminal's default background, set by
+     * the owning {@link TerminalView} before each render. 255 is fully solid, the stock behaviour.
+     * Selections and the block cursor are always drawn solid so they stay easy to see.
+     */
+    int mCellBackgroundAlpha = 255;
+
     public TerminalRenderer(int textSize, Typeface typeface) {
         mTextSize = textSize;
         mTypeface = typeface;
@@ -147,7 +154,8 @@ public final class TerminalRenderer {
                         }
                         drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn, columnWidthSinceLastRun,
                             lastRunStartIndex, charsSinceLastRun, measuredWidthForRun,
-                            cursorColor, cursorShape, lastRunStyle, reverseVideo || invertCursorTextColor || lastRunInsideSelection);
+                            cursorColor, cursorShape, lastRunStyle, reverseVideo || invertCursorTextColor || lastRunInsideSelection,
+                            invertCursorTextColor || lastRunInsideSelection);
                     }
                     measuredWidthForRun = 0.f;
                     lastRunStyle = style;
@@ -175,13 +183,14 @@ public final class TerminalRenderer {
                 invertCursorTextColor = true;
             }
             drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn, columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
-                measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, reverseVideo || invertCursorTextColor || lastRunInsideSelection);
+                measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, reverseVideo || invertCursorTextColor || lastRunInsideSelection,
+                invertCursorTextColor || lastRunInsideSelection);
         }
     }
 
     private void drawTextRun(Canvas canvas, char[] text, int[] palette, float y, int startColumn, int runWidthColumns,
                              int startCharIndex, int runWidthChars, float mes, int cursor, int cursorStyle,
-                             long textStyle, boolean reverseVideo) {
+                             long textStyle, boolean reverseVideo, boolean keepBackgroundSolid) {
         int foreColor = TextStyle.decodeForeColor(textStyle);
         final int effect = TextStyle.decodeEffect(textStyle);
         int backColor = TextStyle.decodeBackColor(textStyle);
@@ -224,7 +233,12 @@ public final class TerminalRenderer {
 
         if (backColor != palette[TextStyle.COLOR_INDEX_BACKGROUND]) {
             // Only draw non-default background.
-            mTextPaint.setColor(backColor);
+            int fillColor = backColor;
+            if (!keepBackgroundSolid && mCellBackgroundAlpha < 255) {
+                // Let whatever is behind the terminal (a wallpaper) show through colored cells.
+                fillColor = (backColor & 0x00FFFFFF) | (mCellBackgroundAlpha << 24);
+            }
+            mTextPaint.setColor(fillColor);
             canvas.drawRect(left, y - mFontLineSpacingAndAscent + mFontAscent, right, y, mTextPaint);
         }
 

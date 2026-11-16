@@ -247,6 +247,9 @@
     <string name="termux_appearance_wallpaper_pick_summary_set">Tap to pick a different image</string>
     <string name="termux_appearance_wallpaper_blur_title">Blur</string>
     <string name="termux_appearance_wallpaper_dim_title">Dim</string>
+    <string name="termux_appearance_cell_opacity_title">Colored background opacity</string>
+    <string name="termux_appearance_cell_opacity_summary">How solid colored backgrounds are, such as vim\'s background, highlighted lines and bars. Lower lets the wallpaper show through. Selections and the cursor stay solid.</string>
+    <string name="termux_appearance_preview_description">Live preview of your wallpaper, font and colors</string>
     <string name="termux_appearance_wallpaper_remove_title">Remove wallpaper</string>
     <string name="termux_appearance_wallpaper_import_failed">Could not use that image</string>
 
@@ -268,6 +271,13 @@
     <string name="termux_appearance_colors_header">Tap a color to change it</string>
 
     <string name="termux_appearance_colors_save_failed">Could not save the color</string>
+
+    <!-- Behavior Preferences -->
+    <string name="termux_behavior_preferences_title">Behavior</string>
+    <string name="termux_behavior_preferences_summary">Keyboard and other ways Termux responds</string>
+    <string name="termux_behavior_keyboard_header">Keyboard</string>
+    <string name="termux_behavior_keyboard_tap_title">Tapping anywhere brings back the keyboard in certain programs</string>
+    <string name="termux_behavior_keyboard_tap_summary">Programs that use the mouse, like vim and htop, normally stop taps from opening the keyboard. With this on, a tap still clicks inside the program and also brings the keyboard back.</string>
 
     <string name="termux_appearance_ui_header">Settings look</string>
     <string name="termux_appearance_ui_mode_title">Settings color</string>

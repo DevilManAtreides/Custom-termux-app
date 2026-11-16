@@ -113,6 +113,12 @@ public final class ColorMath {
         return 0xFF000000 | (r << 16) | (g << 8) | b;
     }
 
+    /** Converts an opacity percentage (0 to 100, clamped) to an alpha value from 0 to 255. */
+    public static int percentToAlpha(int percent) {
+        int p = Math.max(0, Math.min(100, percent));
+        return Math.round(p * 255f / 100f);
+    }
+
     private static double channel(int c) {
         double v = c / 255.0;
         return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);

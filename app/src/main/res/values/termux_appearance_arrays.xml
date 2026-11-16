@@ -30,13 +30,11 @@
 
     <string-array name="termux_appearance_ui_mode_entries">
         <item>Match terminal theme</item>
-        <item>Termux red (original)</item>
         <item>Custom color</item>
     </string-array>
 
     <string-array name="termux_appearance_ui_mode_values">
         <item>terminal</item>
-        <item>termux</item>
         <item>custom</item>
     </string-array>
 

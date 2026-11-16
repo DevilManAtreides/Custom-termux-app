@@ -19,6 +19,7 @@ import android.widget.Toast;
 
 import com.termux.R;
 import com.termux.app.TermuxActivity;
+import com.termux.app.appearance.AppearanceManager;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.interact.MessageDialogUtils;
 import com.termux.shared.interact.ShareUtils;
@@ -198,7 +199,12 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             }
         }
 
-        if (!term.isMouseTrackingActive() && !e.isFromSource(InputDevice.SOURCE_MOUSE)) {
+        // Programs like vim (with mouse support) and htop turn on mouse tracking, and stock Termux then
+        // never shows the keyboard on tap, so once hidden it stays hidden. The tap itself is still sent to
+        // the program as a click (see TerminalView), this only also brings the keyboard back.
+        boolean mouseAppBlocksKeyboard = term.isMouseTrackingActive()
+            && !AppearanceManager.isKeyboardOnTapInMouseAppsEnabled(mActivity);
+        if (!mouseAppBlocksKeyboard && !e.isFromSource(InputDevice.SOURCE_MOUSE)) {
             if (!KeyboardUtils.areDisableSoftKeyboardFlagsSet(mActivity))
                 KeyboardUtils.showSoftKeyboard(mActivity, mActivity.getTerminalView());
             else

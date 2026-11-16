@@ -30,7 +30,7 @@ import java.util.Locale;
  * to the foreground.
  */
 @Keep
-public class AppearancePreferencesFragment extends PreferenceFragmentCompat {
+public class AppearancePreferencesFragment extends PreviewPreferenceFragment {
 
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
 
@@ -53,6 +53,8 @@ public class AppearancePreferencesFragment extends PreferenceFragmentCompat {
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         getPreferenceManager().setSharedPreferencesName(AppearanceManager.PREFS_NAME);
+        // Before the list loads its saved value, so a removed choice never shows as blank.
+        SettingsStyler.normalizeMode(requireContext());
         setPreferencesFromResource(R.xml.termux_appearance_preferences, rootKey);
 
         setUpWallpaper();
@@ -101,6 +103,8 @@ public class AppearancePreferencesFragment extends PreferenceFragmentCompat {
         if (blur != null) blur.setOnPreferenceChangeListener(bump);
         Preference dim = findPreference(AppearanceManager.KEY_WALLPAPER_DIM);
         if (dim != null) dim.setOnPreferenceChangeListener(bump);
+        Preference opacity = findPreference(AppearanceManager.KEY_CELL_OPACITY);
+        if (opacity != null) opacity.setOnPreferenceChangeListener(bump);
 
         Preference pick = findPreference("wallpaper_pick");
         if (pick != null) {
@@ -143,6 +147,8 @@ public class AppearancePreferencesFragment extends PreferenceFragmentCompat {
         if (blur != null) blur.setEnabled(has);
         Preference dim = findPreference(AppearanceManager.KEY_WALLPAPER_DIM);
         if (dim != null) dim.setEnabled(has);
+        Preference opacity = findPreference(AppearanceManager.KEY_CELL_OPACITY);
+        if (opacity != null) opacity.setEnabled(has);
     }
 
     private void importWallpaper(final Uri uri) {

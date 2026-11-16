@@ -24,6 +24,7 @@
             android:max="40"
             app:seekBarIncrement="1"
             app:showSeekBarValue="true"
+            app:updatesContinuously="true"
             app:title="@string/termux_appearance_wallpaper_blur_title" />
 
         <SeekBarPreference
@@ -33,7 +34,19 @@
             android:max="90"
             app:seekBarIncrement="5"
             app:showSeekBarValue="true"
+            app:updatesContinuously="true"
             app:title="@string/termux_appearance_wallpaper_dim_title" />
+
+        <SeekBarPreference
+            app:key="cell_opacity"
+            app:defaultValue="100"
+            app:min="0"
+            android:max="100"
+            app:seekBarIncrement="5"
+            app:showSeekBarValue="true"
+            app:updatesContinuously="true"
+            app:title="@string/termux_appearance_cell_opacity_title"
+            app:summary="@string/termux_appearance_cell_opacity_summary" />
 
         <Preference
             app:key="wallpaper_remove"

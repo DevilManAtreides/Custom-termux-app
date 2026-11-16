@@ -23,20 +23,27 @@ import com.termux.shared.theme.ThemeUtils;
 
 /**
  * Colors the Settings screens: the top bar, the status bar, and the accent color of switches and
- * sliders. By default it follows the terminal's own colors; it can also keep Termux's original red
- * or use a color picked with the color wheel.
+ * sliders. By default it follows the terminal's own colors; it can also use a color picked with
+ * the color wheel.
  */
 public final class SettingsStyler {
 
     public static final String MODE_TERMINAL = "terminal";
-    public static final String MODE_TERMUX = "termux";
     public static final String MODE_CUSTOM = "custom";
 
     public static final String DEFAULT_CUSTOM_COLOR = "#5c6bc0";
 
-    /** Termux's original settings colors, for MODE_TERMUX. */
-    private static final int TERMUX_TOOLBAR = 0xFFFF0000;
-    private static final int TERMUX_STATUS_BAR = 0xFFC4001D;
+    /**
+     * An earlier version also offered a red mode. Anyone who picked it is moved to the terminal theme
+     * so the setting still shows a valid choice.
+     */
+    public static void normalizeMode(@NonNull Context context) {
+        android.content.SharedPreferences prefs = AppearanceManager.getPrefs(context);
+        String mode = prefs.getString(AppearanceManager.KEY_UI_MODE, MODE_TERMINAL);
+        if (!MODE_TERMINAL.equals(mode) && !MODE_CUSTOM.equals(mode)) {
+            prefs.edit().putString(AppearanceManager.KEY_UI_MODE, MODE_TERMINAL).apply();
+        }
+    }
 
     public static final class Style {
         public int toolbarColor;
@@ -54,12 +61,7 @@ public final class SettingsStyler {
         int pageBackground = ThemeUtils.getSystemAttrColor(context, android.R.attr.colorBackground, 0xFFFFFFFF);
 
         Style s = new Style();
-        if (MODE_TERMUX.equals(mode)) {
-            s.toolbarColor = TERMUX_TOOLBAR;
-            s.statusBarColor = TERMUX_STATUS_BAR;
-            s.toolbarTextColor = 0xFFFFFFFF;
-            s.accent = pickAccent(pageBackground, TERMUX_TOOLBAR);
-        } else if (MODE_CUSTOM.equals(mode)) {
+        if (MODE_CUSTOM.equals(mode)) {
             Integer custom = ColorMath.parseHex(prefs.getString(AppearanceManager.KEY_UI_COLOR, DEFAULT_CUSTOM_COLOR));
             int base = custom != null ? custom : ColorMath.parseHex(DEFAULT_CUSTOM_COLOR);
             s.toolbarColor = base;
