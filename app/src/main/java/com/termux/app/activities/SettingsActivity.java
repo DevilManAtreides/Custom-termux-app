@@ -31,6 +31,10 @@ public class SettingsActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Must come before super.onCreate(): after a recreate() the open screens are restored inside it,
+        // and a callback registered later would miss them.
+        SettingsStyler.installFragmentTinting(this);
+
         super.onCreate(savedInstanceState);
 
         AppCompatActivityUtils.setNightMode(this, NightMode.getAppNightMode().getName(), true);
@@ -48,7 +52,6 @@ public class SettingsActivity extends AppCompatActivity {
 
         // Top bar, status bar and switch/slider colors, see Settings > Termux > Appearance.
         SettingsStyler.apply(this);
-        SettingsStyler.installFragmentTinting(this);
     }
 
     @Override

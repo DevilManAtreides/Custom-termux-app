@@ -157,11 +157,10 @@ public final class SettingsStyler {
 
     /**
      * Tints switches and sliders and colors section headers on every preference screen shown in this
-     * activity, including screens opened later, and applies {@link #polishPreferences} to each. The
-     * accent is read once here; changing the style recreates the activity.
+     * activity, including screens opened later, and applies {@link #polishPreferences} to each. Call
+     * before {@code super.onCreate} so screens restored after a recreate are covered too.
      */
     public static void installFragmentTinting(@NonNull AppCompatActivity activity) {
-        final int accent = resolve(activity).accent;
         activity.getSupportFragmentManager().registerFragmentLifecycleCallbacks(
             new FragmentManager.FragmentLifecycleCallbacks() {
                 @Override
@@ -179,7 +178,8 @@ public final class SettingsStyler {
                     if (!(f instanceof PreferenceFragmentCompat)) return;
                     RecyclerView list = ((PreferenceFragmentCompat) f).getListView();
                     if (list == null) return;
-                    list.addOnChildAttachStateChangeListener(new RecyclerView.OnChildAttachStateChangeListener() {
+                    // Read now, not at install time: the theme isn't set up yet before super.onCreate.
+                    final int accent = resolve(f.requireContext()).accent;                    list.addOnChildAttachStateChangeListener(new RecyclerView.OnChildAttachStateChangeListener() {
                         @Override
                         public void onChildViewAttachedToWindow(@NonNull View view) {
                             tintTree(view, accent);
