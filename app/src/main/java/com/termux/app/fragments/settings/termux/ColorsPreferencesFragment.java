@@ -53,12 +53,13 @@ public class ColorsPreferencesFragment extends PreferenceFragmentCompat {
         screen.addPreference(category);
 
         ArrayList<String> keys = AppearanceManager.getColorKeys();
-        final String[] titles = getResources().getStringArray(R.array.termux_appearance_color_titles);
         final String[] descriptions = getResources().getStringArray(R.array.termux_appearance_color_descriptions);
 
         for (int i = 0; i < keys.size(); i++) {
             final String key = keys.get(i);
-            final String title = i < titles.length ? titles[i] : key;
+            // The title is the plain key name (foreground, background, cursor, color0 ... color15),
+            // exactly as it appears in colors.properties. Never a hue, since the user sets that.
+            final String title = key;
             final String description = i < descriptions.length ? descriptions[i] : "";
 
             final Preference pref = new Preference(context);

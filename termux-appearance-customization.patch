@@ -1,0 +1,1554 @@
+From c5dcced235cf19a87ae50dc70ad163dc71b7accb Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 15 Nov 2026 15:16:14 +0000
+Subject: [PATCH] Add Appearance settings: wallpaper with blur/dim, custom
+ fonts, color themes
+
+- New Settings > Termux > Appearance screen (wallpaper picker, blur and dim sliders,
+  font picker, theme presets, per-color editor)
+- Wallpaper drawn in an ImageView behind TerminalView; blur is a one-off stack blur
+  on a downscaled copy so it works on every supported API level
+- Fonts and colors are written to ~/.termux/font.ttf and colors.properties so the
+  GUI stays compatible with hand edits and termux-reload-settings
+- TerminalView.setHasContentBehind() so the view is not treated as opaque when a
+  wallpaper is showing
+---
+ app/src/main/assets/themes/dracula.properties |  19 +
+ .../assets/themes/gruvbox_dark.properties     |  19 +
+ app/src/main/assets/themes/nord.properties    |  19 +
+ .../main/assets/themes/one_dark.properties    |  19 +
+ .../assets/themes/solarized_dark.properties   |  19 +
+ .../assets/themes/solarized_light.properties  |  19 +
+ .../main/assets/themes/tokyo_night.properties |  19 +
+ .../app/appearance/AppearanceManager.java     | 415 ++++++++++++++++++
+ .../com/termux/app/appearance/BlurUtils.java  | 206 +++++++++
+ .../termux/AppearancePreferencesFragment.java | 284 ++++++++++++
+ .../termux/ColorsPreferencesFragment.java     | 133 ++++++
+ .../TermuxTerminalSessionActivityClient.java  |  15 +
+ app/src/main/res/layout/activity_termux.xml   |  33 +-
+ app/src/main/res/values/strings.xml           |  32 ++
+ .../res/xml/termux_appearance_preferences.xml |  79 ++++
+ app/src/main/res/xml/termux_preferences.xml   |   5 +
+ .../java/com/termux/view/TerminalView.java    |  15 +-
+ 17 files changed, 1341 insertions(+), 9 deletions(-)
+ create mode 100644 app/src/main/assets/themes/dracula.properties
+ create mode 100644 app/src/main/assets/themes/gruvbox_dark.properties
+ create mode 100644 app/src/main/assets/themes/nord.properties
+ create mode 100644 app/src/main/assets/themes/one_dark.properties
+ create mode 100644 app/src/main/assets/themes/solarized_dark.properties
+ create mode 100644 app/src/main/assets/themes/solarized_light.properties
+ create mode 100644 app/src/main/assets/themes/tokyo_night.properties
+ create mode 100644 app/src/main/java/com/termux/app/appearance/AppearanceManager.java
+ create mode 100644 app/src/main/java/com/termux/app/appearance/BlurUtils.java
+ create mode 100644 app/src/main/java/com/termux/app/fragments/settings/termux/AppearancePreferencesFragment.java
+ create mode 100644 app/src/main/java/com/termux/app/fragments/settings/termux/ColorsPreferencesFragment.java
+ create mode 100644 app/src/main/res/xml/termux_appearance_preferences.xml
+
+diff --git a/app/src/main/assets/themes/dracula.properties b/app/src/main/assets/themes/dracula.properties
+new file mode 100644
+index 0000000..0288526
+--- /dev/null
++++ b/app/src/main/assets/themes/dracula.properties
+@@ -0,0 +1,19 @@
++background=#282a36
++foreground=#f8f8f2
++cursor=#f8f8f2
++color0=#21222c
++color1=#ff5555
++color2=#50fa7b
++color3=#f1fa8c
++color4=#bd93f9
++color5=#ff79c6
++color6=#8be9fd
++color7=#f8f8f2
++color8=#6272a4
++color9=#ff6e6e
++color10=#69ff94
++color11=#ffffa5
++color12=#d6acff
++color13=#ff92df
++color14=#a4ffff
++color15=#ffffff
+diff --git a/app/src/main/assets/themes/gruvbox_dark.properties b/app/src/main/assets/themes/gruvbox_dark.properties
+new file mode 100644
+index 0000000..9747553
+--- /dev/null
++++ b/app/src/main/assets/themes/gruvbox_dark.properties
+@@ -0,0 +1,19 @@
++background=#282828
++foreground=#ebdbb2
++cursor=#ebdbb2
++color0=#282828
++color1=#cc241d
++color2=#98971a
++color3=#d79921
++color4=#458588
++color5=#b16286
++color6=#689d6a
++color7=#a89984
++color8=#928374
++color9=#fb4934
++color10=#b8bb26
++color11=#fabd2f
++color12=#83a598
++color13=#d3869b
++color14=#8ec07c
++color15=#ebdbb2
+diff --git a/app/src/main/assets/themes/nord.properties b/app/src/main/assets/themes/nord.properties
+new file mode 100644
+index 0000000..e60e03d
+--- /dev/null
++++ b/app/src/main/assets/themes/nord.properties
+@@ -0,0 +1,19 @@
++background=#2e3440
++foreground=#d8dee9
++cursor=#d8dee9
++color0=#3b4252
++color1=#bf616a
++color2=#a3be8c
++color3=#ebcb8b
++color4=#81a1c1
++color5=#b48ead
++color6=#88c0d0
++color7=#e5e9f0
++color8=#4c566a
++color9=#bf616a
++color10=#a3be8c
++color11=#ebcb8b
++color12=#81a1c1
++color13=#b48ead
++color14=#8fbcbb
++color15=#eceff4
+diff --git a/app/src/main/assets/themes/one_dark.properties b/app/src/main/assets/themes/one_dark.properties
+new file mode 100644
+index 0000000..d5df630
+--- /dev/null
++++ b/app/src/main/assets/themes/one_dark.properties
+@@ -0,0 +1,19 @@
++background=#282c34
++foreground=#abb2bf
++cursor=#528bff
++color0=#282c34
++color1=#e06c75
++color2=#98c379
++color3=#e5c07b
++color4=#61afef
++color5=#c678dd
++color6=#56b6c2
++color7=#abb2bf
++color8=#5c6370
++color9=#e06c75
++color10=#98c379
++color11=#e5c07b
++color12=#61afef
++color13=#c678dd
++color14=#56b6c2
++color15=#ffffff
+diff --git a/app/src/main/assets/themes/solarized_dark.properties b/app/src/main/assets/themes/solarized_dark.properties
+new file mode 100644
+index 0000000..68a5879
+--- /dev/null
++++ b/app/src/main/assets/themes/solarized_dark.properties
+@@ -0,0 +1,19 @@
++background=#002b36
++foreground=#839496
++cursor=#93a1a1
++color0=#073642
++color1=#dc322f
++color2=#859900
++color3=#b58900
++color4=#268bd2
++color5=#d33682
++color6=#2aa198
++color7=#eee8d5
++color8=#002b36
++color9=#cb4b16
++color10=#586e75
++color11=#657b83
++color12=#839496
++color13=#6c71c4
++color14=#93a1a1
++color15=#fdf6e3
+diff --git a/app/src/main/assets/themes/solarized_light.properties b/app/src/main/assets/themes/solarized_light.properties
+new file mode 100644
+index 0000000..ff6f1ad
+--- /dev/null
++++ b/app/src/main/assets/themes/solarized_light.properties
+@@ -0,0 +1,19 @@
++background=#fdf6e3
++foreground=#657b83
++cursor=#586e75
++color0=#073642
++color1=#dc322f
++color2=#859900
++color3=#b58900
++color4=#268bd2
++color5=#d33682
++color6=#2aa198
++color7=#eee8d5
++color8=#002b36
++color9=#cb4b16
++color10=#586e75
++color11=#657b83
++color12=#839496
++color13=#6c71c4
++color14=#93a1a1
++color15=#fdf6e3
+diff --git a/app/src/main/assets/themes/tokyo_night.properties b/app/src/main/assets/themes/tokyo_night.properties
+new file mode 100644
+index 0000000..24abb27
+--- /dev/null
++++ b/app/src/main/assets/themes/tokyo_night.properties
+@@ -0,0 +1,19 @@
++background=#1a1b26
++foreground=#c0caf5
++cursor=#c0caf5
++color0=#15161e
++color1=#f7768e
++color2=#9ece6a
++color3=#e0af68
++color4=#7aa2f7
++color5=#bb9af7
++color6=#7dcfff
++color7=#a9b1d6
++color8=#414868
++color9=#f7768e
++color10=#9ece6a
++color11=#e0af68
++color12=#7aa2f7
++color13=#bb9af7
++color14=#7dcfff
++color15=#c0caf5
+diff --git a/app/src/main/java/com/termux/app/appearance/AppearanceManager.java b/app/src/main/java/com/termux/app/appearance/AppearanceManager.java
+new file mode 100644
+index 0000000..a3d0fdb
+--- /dev/null
++++ b/app/src/main/java/com/termux/app/appearance/AppearanceManager.java
+@@ -0,0 +1,415 @@
++package com.termux.app.appearance;
++
++import android.app.Activity;
++import android.content.Context;
++import android.content.SharedPreferences;
++import android.graphics.Bitmap;
++import android.graphics.BitmapFactory;
++import android.graphics.Color;
++import android.graphics.Matrix;
++import android.graphics.PorterDuff;
++import android.graphics.Typeface;
++import android.graphics.drawable.BitmapDrawable;
++import android.media.ExifInterface;
++import android.net.Uri;
++import android.view.View;
++import android.widget.ImageView;
++
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++
++import com.termux.R;
++import com.termux.shared.logger.Logger;
++import com.termux.shared.termux.TermuxConstants;
++
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.OutputStream;
++import java.nio.charset.StandardCharsets;
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.Map;
++import java.util.Properties;
++import java.util.TreeMap;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
++
++/**
++ * Central place for the wallpaper / font / color customisation that is edited from the
++ * Appearance settings screen and rendered by {@link com.termux.app.TermuxActivity}.
++ *
++ * Fonts and colors are written to the same files the stock app already reads
++ * ({@link TermuxConstants#TERMUX_FONT_FILE} and {@link TermuxConstants#TERMUX_COLOR_PROPERTIES_FILE}),
++ * so the GUI and hand edited files / {@code termux-reload-settings} keep working together.
++ */
++public final class AppearanceManager {
++
++    private static final String LOG_TAG = "AppearanceManager";
++
++    public static final String PREFS_NAME = "termux_appearance";
++
++    public static final String KEY_WALLPAPER_ENABLED = "wallpaper_enabled";
++    public static final String KEY_WALLPAPER_BLUR = "wallpaper_blur";
++    public static final String KEY_WALLPAPER_DIM = "wallpaper_dim";
++    public static final String KEY_THEME_PRESET = "theme_preset";
++    /** Bumped whenever anything changes, so the terminal activity knows to re-apply on return. */
++    public static final String KEY_STYLE_VERSION = "style_version";
++
++    public static final int MAX_BLUR = 40;
++    public static final int MAX_DIM = 90;
++
++    public static final String PRESET_DEFAULT = "default";
++
++    private static final String WALLPAPER_FILE_NAME = "terminal_wallpaper.jpg";
++    private static final int WALLPAPER_MAX_DIMENSION = 1600;
++    /** Blur runs on a copy scaled to this size; blurring a small image is faster and looks the same once scaled up. */
++    private static final int BLUR_WORKING_DIMENSION = 720;
++
++    private static final ExecutorService sExecutor = Executors.newSingleThreadExecutor();
++    /** Identifies what is currently shown, so unchanged settings do not trigger a re-blur. */
++    private static String sAppliedKey;
++    private static int sApplyGeneration;
++
++    private AppearanceManager() {}
++
++    public static SharedPreferences getPrefs(@NonNull Context context) {
++        return context.getApplicationContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
++    }
++
++    public static long getStyleVersion(@NonNull Context context) {
++        return getPrefs(context).getLong(KEY_STYLE_VERSION, 0);
++    }
++
++    public static void markStyleChanged(@NonNull Context context) {
++        SharedPreferences prefs = getPrefs(context);
++        prefs.edit().putLong(KEY_STYLE_VERSION, prefs.getLong(KEY_STYLE_VERSION, 0) + 1).apply();
++    }
++
++    // ---------------------------------------------------------------- wallpaper
++
++    @NonNull
++    public static File getWallpaperFile(@NonNull Context context) {
++        return new File(context.getApplicationContext().getDir("appearance", Context.MODE_PRIVATE), WALLPAPER_FILE_NAME);
++    }
++
++    public static boolean hasWallpaper(@NonNull Context context) {
++        File f = getWallpaperFile(context);
++        return f.isFile() && f.length() > 0;
++    }
++
++    public static boolean isWallpaperEnabled(@NonNull Context context) {
++        return getPrefs(context).getBoolean(KEY_WALLPAPER_ENABLED, false) && hasWallpaper(context);
++    }
++
++    /**
++     * Copies the picked image into app storage, downscaled and rotated according to its EXIF
++     * orientation. Must be called off the main thread.
++     */
++    public static boolean importWallpaper(@NonNull Context context, @NonNull Uri uri) {
++        Context app = context.getApplicationContext();
++        File tmp = new File(app.getCacheDir(), "wallpaper_import.tmp");
++        try {
++            try (InputStream in = app.getContentResolver().openInputStream(uri);
++                 OutputStream out = new FileOutputStream(tmp)) {
++                if (in == null) return false;
++                copy(in, out);
++            }
++
++            BitmapFactory.Options bounds = new BitmapFactory.Options();
++            bounds.inJustDecodeBounds = true;
++            BitmapFactory.decodeFile(tmp.getAbsolutePath(), bounds);
++            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return false;
++
++            int sample = 1;
++            while (Math.max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= WALLPAPER_MAX_DIMENSION) {
++                sample *= 2;
++            }
++            BitmapFactory.Options opts = new BitmapFactory.Options();
++            opts.inSampleSize = sample;
++            Bitmap decoded = BitmapFactory.decodeFile(tmp.getAbsolutePath(), opts);
++            if (decoded == null) return false;
++
++            int rotation = 0;
++            try {
++                int orientation = new ExifInterface(tmp.getAbsolutePath())
++                    .getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
++                if (orientation == ExifInterface.ORIENTATION_ROTATE_90) rotation = 90;
++                else if (orientation == ExifInterface.ORIENTATION_ROTATE_180) rotation = 180;
++                else if (orientation == ExifInterface.ORIENTATION_ROTATE_270) rotation = 270;
++            } catch (IOException ignored) {
++                // No usable EXIF data, keep the image as decoded.
++            }
++            if (rotation != 0) {
++                Matrix m = new Matrix();
++                m.postRotate(rotation);
++                Bitmap rotated = Bitmap.createBitmap(decoded, 0, 0, decoded.getWidth(), decoded.getHeight(), m, true);
++                if (rotated != decoded) decoded.recycle();
++                decoded = rotated;
++            }
++
++            try (OutputStream out = new FileOutputStream(getWallpaperFile(app))) {
++                decoded.compress(Bitmap.CompressFormat.JPEG, 90, out);
++            }
++            decoded.recycle();
++            markStyleChanged(app);
++            return true;
++        } catch (Exception e) {
++            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to import wallpaper", e);
++            return false;
++        } finally {
++            //noinspection ResultOfMethodCallIgnored
++            tmp.delete();
++        }
++    }
++
++    public static void removeWallpaper(@NonNull Context context) {
++        //noinspection ResultOfMethodCallIgnored
++        getWallpaperFile(context).delete();
++        getPrefs(context).edit().putBoolean(KEY_WALLPAPER_ENABLED, false).apply();
++        markStyleChanged(context);
++    }
++
++    /**
++     * Shows (or hides) the wallpaper in {@code wallpaperView} using the saved blur and dim settings,
++     * and makes the extra keys bar translucent so the wallpaper is visible behind it.
++     * Safe to call repeatedly: unchanged settings are a no-op.
++     */
++    public static void applyWallpaper(@NonNull final Activity activity, @Nullable final ImageView wallpaperView) {
++        if (wallpaperView == null) return;
++
++        final Context app = activity.getApplicationContext();
++        final View toolbar = activity.findViewById(R.id.terminal_toolbar_view_pager);
++        final boolean enabled = isWallpaperEnabled(app);
++
++        if (toolbar != null) {
++            toolbar.setBackgroundColor(enabled ? 0x99000000 : Color.BLACK);
++        }
++
++        if (!enabled) {
++            sAppliedKey = null;
++            sApplyGeneration++;
++            wallpaperView.setImageDrawable(null);
++            wallpaperView.setVisibility(View.GONE);
++            return;
++        }
++
++        SharedPreferences prefs = getPrefs(app);
++        final int blur = clamp(prefs.getInt(KEY_WALLPAPER_BLUR, 0), 0, MAX_BLUR);
++        final int dim = clamp(prefs.getInt(KEY_WALLPAPER_DIM, 30), 0, MAX_DIM);
++        final File file = getWallpaperFile(app);
++        final String key = file.lastModified() + "|" + blur;
++
++        // Dim is just a color filter, so it never needs a re-blur.
++        wallpaperView.setColorFilter(Color.argb(Math.round(dim * 255f / 100f), 0, 0, 0), PorterDuff.Mode.SRC_ATOP);
++        wallpaperView.setScaleType(ImageView.ScaleType.CENTER_CROP);
++        wallpaperView.setVisibility(View.VISIBLE);
++
++        if (key.equals(sAppliedKey) && wallpaperView.getDrawable() != null) return;
++
++        final int generation = ++sApplyGeneration;
++        sExecutor.execute(new Runnable() {
++            @Override
++            public void run() {
++                Bitmap result = null;
++                try {
++                    Bitmap src = BitmapFactory.decodeFile(file.getAbsolutePath());
++                    if (src != null) {
++                        result = blur > 0 ? blurScaled(src, blur) : src;
++                        if (result != src) src.recycle();
++                    }
++                } catch (Throwable t) {
++                    Logger.logStackTraceWithMessage(LOG_TAG, "Failed to prepare wallpaper", t instanceof Exception ? (Exception) t : new Exception(t));
++                }
++                final Bitmap finalResult = result;
++                activity.runOnUiThread(new Runnable() {
++                    @Override
++                    public void run() {
++                        if (generation != sApplyGeneration || activity.isFinishing() || finalResult == null) return;
++                        wallpaperView.setImageDrawable(new BitmapDrawable(activity.getResources(), finalResult));
++                        sAppliedKey = key;
++                    }
++                });
++            }
++        });
++    }
++
++    private static Bitmap blurScaled(Bitmap src, int radius) {
++        int w = src.getWidth();
++        int h = src.getHeight();
++        float scale = Math.min(1f, BLUR_WORKING_DIMENSION / (float) Math.max(w, h));
++        Bitmap small = scale < 1f
++            ? Bitmap.createScaledBitmap(src, Math.max(1, Math.round(w * scale)), Math.max(1, Math.round(h * scale)), true)
++            : src;
++        Bitmap blurred = BlurUtils.stackBlur(small, radius);
++        if (small != src) small.recycle();
++        return blurred;
++    }
++
++    // ---------------------------------------------------------------- fonts
++
++    public static boolean hasCustomFont() {
++        File f = TermuxConstants.TERMUX_FONT_FILE;
++        return f.isFile() && f.length() > 0;
++    }
++
++    /** Validates and installs a font as {@code ~/.termux/font.ttf}. Must be called off the main thread. */
++    public static boolean importFont(@NonNull Context context, @NonNull Uri uri) {
++        Context app = context.getApplicationContext();
++        File tmp = new File(app.getCacheDir(), "font_import.tmp");
++        try {
++            try (InputStream in = app.getContentResolver().openInputStream(uri);
++                 OutputStream out = new FileOutputStream(tmp)) {
++                if (in == null) return false;
++                copy(in, out);
++            }
++            if (!looksLikeFont(tmp)) return false;
++            // Throws or yields the default font if the file is unusable on this device.
++            Typeface.createFromFile(tmp);
++
++            File target = TermuxConstants.TERMUX_FONT_FILE;
++            File parent = target.getParentFile();
++            if (parent != null && !parent.isDirectory() && !parent.mkdirs()) return false;
++            try (InputStream in = new FileInputStream(tmp); OutputStream out = new FileOutputStream(target)) {
++                copy(in, out);
++            }
++            markStyleChanged(app);
++            return true;
++        } catch (Exception e) {
++            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to import font", e);
++            return false;
++        } finally {
++            //noinspection ResultOfMethodCallIgnored
++            tmp.delete();
++        }
++    }
++
++    public static void resetFont(@NonNull Context context) {
++        //noinspection ResultOfMethodCallIgnored
++        TermuxConstants.TERMUX_FONT_FILE.delete();
++        markStyleChanged(context);
++    }
++
++    /** TrueType, OpenType/CFF, TrueType collection or legacy Apple 'true' header. */
++    private static boolean looksLikeFont(File f) throws IOException {
++        byte[] magic = new byte[4];
++        try (InputStream in = new FileInputStream(f)) {
++            if (in.read(magic) != 4) return false;
++        }
++        String tag = new String(magic, StandardCharsets.ISO_8859_1);
++        return (magic[0] == 0 && magic[1] == 1 && magic[2] == 0 && magic[3] == 0)
++            || tag.equals("OTTO") || tag.equals("ttcf") || tag.equals("true");
++    }
++
++    // ---------------------------------------------------------------- colors / themes
++
++    /** Names in the order they are shown in the color editor. */
++    public static ArrayList<String> getColorKeys() {
++        ArrayList<String> keys = new ArrayList<>();
++        keys.add("foreground");
++        keys.add("background");
++        keys.add("cursor");
++        for (int i = 0; i < 16; i++) keys.add("color" + i);
++        return keys;
++    }
++
++    /** Lists theme preset asset names (without extension), sorted. */
++    public static ArrayList<String> listPresets(@NonNull Context context) {
++        ArrayList<String> names = new ArrayList<>();
++        try {
++            String[] files = context.getAssets().list("themes");
++            if (files != null) {
++                for (String f : files) {
++                    if (f.endsWith(".properties")) names.add(f.substring(0, f.length() - ".properties".length()));
++                }
++            }
++        } catch (IOException e) {
++            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to list theme presets", e);
++        }
++        Collections.sort(names);
++        return names;
++    }
++
++    /** Installs a bundled preset as {@code ~/.termux/colors.properties}; {@link #PRESET_DEFAULT} removes the file. */
++    public static boolean applyPreset(@NonNull Context context, @NonNull String preset) {
++        Context app = context.getApplicationContext();
++        File target = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE;
++        try {
++            if (PRESET_DEFAULT.equals(preset)) {
++                //noinspection ResultOfMethodCallIgnored
++                target.delete();
++            } else {
++                File parent = target.getParentFile();
++                if (parent != null && !parent.isDirectory() && !parent.mkdirs()) return false;
++                try (InputStream in = app.getAssets().open("themes/" + preset + ".properties");
++                     OutputStream out = new FileOutputStream(target)) {
++                    copy(in, out);
++                }
++            }
++            getPrefs(app).edit().putString(KEY_THEME_PRESET, preset).apply();
++            markStyleChanged(app);
++            return true;
++        } catch (Exception e) {
++            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to apply preset " + preset, e);
++            return false;
++        }
++    }
++
++    /** Reads the user's current colors file (empty if there is none or it is unreadable). */
++    @NonNull
++    public static Properties readColorProperties() {
++        Properties props = new Properties();
++        File f = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE;
++        if (f.isFile()) {
++            try (InputStream in = new FileInputStream(f)) {
++                props.load(in);
++            } catch (Exception e) {
++                Logger.logStackTraceWithMessage(LOG_TAG, "Failed to read colors.properties", e);
++            }
++        }
++        return props;
++    }
++
++    /**
++     * Writes colors as plain {@code key=#rrggbb} lines. {@link Properties#store} is avoided on purpose
++     * because it escapes '#' and adds a timestamp, which makes the file ugly to hand edit afterwards.
++     */
++    public static boolean writeColorProperties(@NonNull Context context, @NonNull Map<String, String> colors) {
++        File target = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE;
++        try {
++            File parent = target.getParentFile();
++            if (parent != null && !parent.isDirectory() && !parent.mkdirs()) return false;
++            StringBuilder sb = new StringBuilder();
++            for (Map.Entry<String, String> e : new TreeMap<>(colors).entrySet()) {
++                sb.append(e.getKey()).append('=').append(e.getValue()).append('\n');
++            }
++            try (OutputStream out = new FileOutputStream(target)) {
++                out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
++            }
++            getPrefs(context).edit().putString(KEY_THEME_PRESET, "custom").apply();
++            markStyleChanged(context);
++            return true;
++        } catch (Exception e) {
++            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to write colors.properties", e);
++            return false;
++        }
++    }
++
++    public static boolean isValidHexColor(@Nullable String value) {
++        return value != null && value.matches("#[0-9a-fA-F]{6}");
++    }
++
++    // ---------------------------------------------------------------- helpers
++
++    private static void copy(InputStream in, OutputStream out) throws IOException {
++        byte[] buf = new byte[16 * 1024];
++        int n;
++        while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
++    }
++
++    private static int clamp(int v, int lo, int hi) {
++        return Math.max(lo, Math.min(hi, v));
++    }
++}
+diff --git a/app/src/main/java/com/termux/app/appearance/BlurUtils.java b/app/src/main/java/com/termux/app/appearance/BlurUtils.java
+new file mode 100644
+index 0000000..42e535f
+--- /dev/null
++++ b/app/src/main/java/com/termux/app/appearance/BlurUtils.java
+@@ -0,0 +1,206 @@
++package com.termux.app.appearance;
++
++import android.graphics.Bitmap;
++
++/**
++ * Pure-Java stack blur (Mario Klingemann's algorithm). It works on every API level the app supports
++ * (RenderScript is deprecated and RenderEffect needs Android 12), and is only run once when the
++ * wallpaper settings change, never per frame.
++ */
++public final class BlurUtils {
++
++    private BlurUtils() {}
++
++    /** Returns a blurred copy of {@code src}. A radius below 1 returns an unblurred copy. */
++    public static Bitmap stackBlur(Bitmap src, int radius) {
++        Bitmap bitmap = src.copy(Bitmap.Config.ARGB_8888, true);
++        if (radius < 1) return bitmap;
++
++        int w = bitmap.getWidth();
++        int h = bitmap.getHeight();
++        int[] pix = new int[w * h];
++        bitmap.getPixels(pix, 0, w, 0, 0, w, h);
++
++        int wm = w - 1;
++        int hm = h - 1;
++        int wh = w * h;
++        int div = radius + radius + 1;
++
++        int[] r = new int[wh];
++        int[] g = new int[wh];
++        int[] b = new int[wh];
++        int rsum, gsum, bsum, x, y, i, p, yp, yi, yw;
++        int[] vmin = new int[Math.max(w, h)];
++
++        int divsum = (div + 1) >> 1;
++        divsum *= divsum;
++        int[] dv = new int[256 * divsum];
++        for (i = 0; i < 256 * divsum; i++) {
++            dv[i] = i / divsum;
++        }
++
++        yw = yi = 0;
++
++        int[][] stack = new int[div][3];
++        int stackpointer, stackstart, rbs;
++        int[] sir;
++        int r1 = radius + 1;
++        int routsum, goutsum, boutsum, rinsum, ginsum, binsum;
++
++        for (y = 0; y < h; y++) {
++            rinsum = ginsum = binsum = routsum = goutsum = boutsum = rsum = gsum = bsum = 0;
++            for (i = -radius; i <= radius; i++) {
++                p = pix[yi + Math.min(wm, Math.max(i, 0))];
++                sir = stack[i + radius];
++                sir[0] = (p & 0xff0000) >> 16;
++                sir[1] = (p & 0x00ff00) >> 8;
++                sir[2] = (p & 0x0000ff);
++                rbs = r1 - Math.abs(i);
++                rsum += sir[0] * rbs;
++                gsum += sir[1] * rbs;
++                bsum += sir[2] * rbs;
++                if (i > 0) {
++                    rinsum += sir[0];
++                    ginsum += sir[1];
++                    binsum += sir[2];
++                } else {
++                    routsum += sir[0];
++                    goutsum += sir[1];
++                    boutsum += sir[2];
++                }
++            }
++            stackpointer = radius;
++
++            for (x = 0; x < w; x++) {
++                r[yi] = dv[rsum];
++                g[yi] = dv[gsum];
++                b[yi] = dv[bsum];
++
++                rsum -= routsum;
++                gsum -= goutsum;
++                bsum -= boutsum;
++
++                stackstart = stackpointer - radius + div;
++                sir = stack[stackstart % div];
++
++                routsum -= sir[0];
++                goutsum -= sir[1];
++                boutsum -= sir[2];
++
++                if (y == 0) {
++                    vmin[x] = Math.min(x + radius + 1, wm);
++                }
++                p = pix[yw + vmin[x]];
++
++                sir[0] = (p & 0xff0000) >> 16;
++                sir[1] = (p & 0x00ff00) >> 8;
++                sir[2] = (p & 0x0000ff);
++
++                rinsum += sir[0];
++                ginsum += sir[1];
++                binsum += sir[2];
++
++                rsum += rinsum;
++                gsum += ginsum;
++                bsum += binsum;
++
++                stackpointer = (stackpointer + 1) % div;
++                sir = stack[stackpointer % div];
++
++                routsum += sir[0];
++                goutsum += sir[1];
++                boutsum += sir[2];
++
++                rinsum -= sir[0];
++                ginsum -= sir[1];
++                binsum -= sir[2];
++
++                yi++;
++            }
++            yw += w;
++        }
++
++        for (x = 0; x < w; x++) {
++            rinsum = ginsum = binsum = routsum = goutsum = boutsum = rsum = gsum = bsum = 0;
++            yp = -radius * w;
++            for (i = -radius; i <= radius; i++) {
++                yi = Math.max(0, yp) + x;
++
++                sir = stack[i + radius];
++
++                sir[0] = r[yi];
++                sir[1] = g[yi];
++                sir[2] = b[yi];
++
++                rbs = r1 - Math.abs(i);
++
++                rsum += r[yi] * rbs;
++                gsum += g[yi] * rbs;
++                bsum += b[yi] * rbs;
++
++                if (i > 0) {
++                    rinsum += sir[0];
++                    ginsum += sir[1];
++                    binsum += sir[2];
++                } else {
++                    routsum += sir[0];
++                    goutsum += sir[1];
++                    boutsum += sir[2];
++                }
++
++                if (i < hm) {
++                    yp += w;
++                }
++            }
++            yi = x;
++            stackpointer = radius;
++            for (y = 0; y < h; y++) {
++                pix[yi] = 0xff000000 | (dv[rsum] << 16) | (dv[gsum] << 8) | dv[bsum];
++
++                rsum -= routsum;
++                gsum -= goutsum;
++                bsum -= boutsum;
++
++                stackstart = stackpointer - radius + div;
++                sir = stack[stackstart % div];
++
++                routsum -= sir[0];
++                goutsum -= sir[1];
++                boutsum -= sir[2];
++
++                if (x == 0) {
++                    vmin[y] = Math.min(y + r1, hm) * w;
++                }
++                p = x + vmin[y];
++
++                sir[0] = r[p];
++                sir[1] = g[p];
++                sir[2] = b[p];
++
++                rinsum += sir[0];
++                ginsum += sir[1];
++                binsum += sir[2];
++
++                rsum += rinsum;
++                gsum += ginsum;
++                bsum += binsum;
++
++                stackpointer = (stackpointer + 1) % div;
++                sir = stack[stackpointer];
++
++                routsum += sir[0];
++                goutsum += sir[1];
++                boutsum += sir[2];
++
++                rinsum -= sir[0];
++                ginsum -= sir[1];
++                binsum -= sir[2];
++
++                yi += w;
++            }
++        }
++
++        bitmap.setPixels(pix, 0, w, 0, 0, w, h);
++        return bitmap;
++    }
++}
+diff --git a/app/src/main/java/com/termux/app/fragments/settings/termux/AppearancePreferencesFragment.java b/app/src/main/java/com/termux/app/fragments/settings/termux/AppearancePreferencesFragment.java
+new file mode 100644
+index 0000000..6419b49
+--- /dev/null
++++ b/app/src/main/java/com/termux/app/fragments/settings/termux/AppearancePreferencesFragment.java
+@@ -0,0 +1,284 @@
++package com.termux.app.fragments.settings.termux;
++
++import android.net.Uri;
++import android.os.Bundle;
++import android.os.Handler;
++import android.os.Looper;
++import android.widget.Toast;
++
++import androidx.activity.result.ActivityResultLauncher;
++import androidx.activity.result.contract.ActivityResultContracts;
++import androidx.annotation.Keep;
++import androidx.annotation.Nullable;
++import androidx.preference.ListPreference;
++import androidx.preference.Preference;
++import androidx.preference.PreferenceFragmentCompat;
++import androidx.preference.SwitchPreferenceCompat;
++
++import com.termux.R;
++import com.termux.app.appearance.AppearanceManager;
++
++import java.util.ArrayList;
++import java.util.Locale;
++
++/**
++ * GUI for wallpaper, blur, fonts and color themes. All values live in
++ * {@link AppearanceManager#PREFS_NAME}; the terminal activity picks changes up when it returns
++ * to the foreground.
++ */
++@Keep
++public class AppearancePreferencesFragment extends PreferenceFragmentCompat {
++
++    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
++
++    private final ActivityResultLauncher<String> mWallpaperPicker =
++        registerForActivityResult(new ActivityResultContracts.GetContent(), new androidx.activity.result.ActivityResultCallback<Uri>() {
++            @Override
++            public void onActivityResult(@Nullable Uri uri) {
++                if (uri != null) importWallpaper(uri);
++            }
++        });
++
++    private final ActivityResultLauncher<String> mFontPicker =
++        registerForActivityResult(new ActivityResultContracts.GetContent(), new androidx.activity.result.ActivityResultCallback<Uri>() {
++            @Override
++            public void onActivityResult(@Nullable Uri uri) {
++                if (uri != null) importFont(uri);
++            }
++        });
++
++    @Override
++    public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
++        getPreferenceManager().setSharedPreferencesName(AppearanceManager.PREFS_NAME);
++        setPreferencesFromResource(R.xml.termux_appearance_preferences, rootKey);
++
++        setUpWallpaper();
++        setUpFont();
++        setUpTheme();
++    }
++
++    @Override
++    public void onResume() {
++        super.onResume();
++        // The custom colors screen may have changed the theme while we were in the background.
++        refreshThemeSummary();
++        refreshWallpaperSummary();
++        refreshFontSummary();
++    }
++
++    // ---------------------------------------------------------------- wallpaper
++
++    private void setUpWallpaper() {
++        final SwitchPreferenceCompat enabled = findPreference(AppearanceManager.KEY_WALLPAPER_ENABLED);
++        if (enabled != null) {
++            enabled.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
++                @Override
++                public boolean onPreferenceChange(Preference preference, Object newValue) {
++                    if ((Boolean) newValue && !AppearanceManager.hasWallpaper(requireContext())) {
++                        // Nothing to show yet: ask for an image first, which turns the switch on once imported.
++                        mWallpaperPicker.launch("image/*");
++                        return false;
++                    }
++                    AppearanceManager.markStyleChanged(requireContext());
++                    return true;
++                }
++            });
++        }
++
++        Preference.OnPreferenceChangeListener bump = new Preference.OnPreferenceChangeListener() {
++            @Override
++            public boolean onPreferenceChange(Preference preference, Object newValue) {
++                AppearanceManager.markStyleChanged(requireContext());
++                return true;
++            }
++        };
++        Preference blur = findPreference(AppearanceManager.KEY_WALLPAPER_BLUR);
++        if (blur != null) blur.setOnPreferenceChangeListener(bump);
++        Preference dim = findPreference(AppearanceManager.KEY_WALLPAPER_DIM);
++        if (dim != null) dim.setOnPreferenceChangeListener(bump);
++
++        Preference pick = findPreference("wallpaper_pick");
++        if (pick != null) {
++            pick.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
++                @Override
++                public boolean onPreferenceClick(Preference preference) {
++                    mWallpaperPicker.launch("image/*");
++                    return true;
++                }
++            });
++        }
++
++        Preference remove = findPreference("wallpaper_remove");
++        if (remove != null) {
++            remove.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
++                @Override
++                public boolean onPreferenceClick(Preference preference) {
++                    AppearanceManager.removeWallpaper(requireContext());
++                    SwitchPreferenceCompat sw = findPreference(AppearanceManager.KEY_WALLPAPER_ENABLED);
++                    if (sw != null) sw.setChecked(false);
++                    refreshWallpaperSummary();
++                    return true;
++                }
++            });
++        }
++        refreshWallpaperSummary();
++    }
++
++    private void refreshWallpaperSummary() {
++        if (getContext() == null) return;
++        boolean has = AppearanceManager.hasWallpaper(requireContext());
++        Preference pick = findPreference("wallpaper_pick");
++        if (pick != null) {
++            pick.setSummary(has ? R.string.termux_appearance_wallpaper_pick_summary_set
++                : R.string.termux_appearance_wallpaper_pick_summary_none);
++        }
++        Preference remove = findPreference("wallpaper_remove");
++        if (remove != null) remove.setEnabled(has);
++        Preference blur = findPreference(AppearanceManager.KEY_WALLPAPER_BLUR);
++        if (blur != null) blur.setEnabled(has);
++        Preference dim = findPreference(AppearanceManager.KEY_WALLPAPER_DIM);
++        if (dim != null) dim.setEnabled(has);
++    }
++
++    private void importWallpaper(final Uri uri) {
++        final android.content.Context app = requireContext().getApplicationContext();
++        new Thread(new Runnable() {
++            @Override
++            public void run() {
++                final boolean ok = AppearanceManager.importWallpaper(app, uri);
++                mMainHandler.post(new Runnable() {
++                    @Override
++                    public void run() {
++                        if (!isAdded()) return;
++                        if (ok) {
++                            SwitchPreferenceCompat sw = findPreference(AppearanceManager.KEY_WALLPAPER_ENABLED);
++                            if (sw != null) sw.setChecked(true);
++                            AppearanceManager.markStyleChanged(app);
++                        } else {
++                            Toast.makeText(app, R.string.termux_appearance_wallpaper_import_failed, Toast.LENGTH_SHORT).show();
++                        }
++                        refreshWallpaperSummary();
++                    }
++                });
++            }
++        }, "appearance-wallpaper-import").start();
++    }
++
++    // ---------------------------------------------------------------- font
++
++    private void setUpFont() {
++        Preference pick = findPreference("font_pick");
++        if (pick != null) {
++            pick.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
++                @Override
++                public boolean onPreferenceClick(Preference preference) {
++                    // Font files have no reliable MIME type across file providers, so accept anything and validate the header.
++                    mFontPicker.launch("*/*");
++                    return true;
++                }
++            });
++        }
++        Preference reset = findPreference("font_reset");
++        if (reset != null) {
++            reset.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
++                @Override
++                public boolean onPreferenceClick(Preference preference) {
++                    AppearanceManager.resetFont(requireContext());
++                    refreshFontSummary();
++                    return true;
++                }
++            });
++        }
++        refreshFontSummary();
++    }
++
++    private void refreshFontSummary() {
++        boolean custom = AppearanceManager.hasCustomFont();
++        Preference pick = findPreference("font_pick");
++        if (pick != null) {
++            pick.setSummary(custom ? R.string.termux_appearance_font_pick_summary_custom
++                : R.string.termux_appearance_font_pick_summary_default);
++        }
++        Preference reset = findPreference("font_reset");
++        if (reset != null) reset.setEnabled(custom);
++    }
++
++    private void importFont(final Uri uri) {
++        final android.content.Context app = requireContext().getApplicationContext();
++        new Thread(new Runnable() {
++            @Override
++            public void run() {
++                final boolean ok = AppearanceManager.importFont(app, uri);
++                mMainHandler.post(new Runnable() {
++                    @Override
++                    public void run() {
++                        if (!isAdded()) return;
++                        if (!ok) {
++                            Toast.makeText(app, R.string.termux_appearance_font_import_failed, Toast.LENGTH_SHORT).show();
++                        }
++                        refreshFontSummary();
++                    }
++                });
++            }
++        }, "appearance-font-import").start();
++    }
++
++    // ---------------------------------------------------------------- theme
++
++    private void setUpTheme() {
++        final ListPreference preset = findPreference(AppearanceManager.KEY_THEME_PRESET);
++        if (preset == null) return;
++
++        ArrayList<String> names = AppearanceManager.listPresets(requireContext());
++        ArrayList<CharSequence> entries = new ArrayList<>();
++        ArrayList<CharSequence> values = new ArrayList<>();
++        entries.add(getString(R.string.termux_appearance_theme_default));
++        values.add(AppearanceManager.PRESET_DEFAULT);
++        for (String name : names) {
++            entries.add(prettify(name));
++            values.add(name);
++        }
++        preset.setEntries(entries.toArray(new CharSequence[0]));
++        preset.setEntryValues(values.toArray(new CharSequence[0]));
++
++        preset.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
++            @Override
++            public boolean onPreferenceChange(Preference preference, Object newValue) {
++                boolean ok = AppearanceManager.applyPreset(requireContext(), (String) newValue);
++                if (ok) setThemeSummary((String) newValue);
++                return ok;
++            }
++        });
++        refreshThemeSummary();
++    }
++
++    private void refreshThemeSummary() {
++        if (getContext() == null) return;
++        String value = AppearanceManager.getPrefs(requireContext())
++            .getString(AppearanceManager.KEY_THEME_PRESET, AppearanceManager.PRESET_DEFAULT);
++        setThemeSummary(value);
++    }
++
++    private void setThemeSummary(@Nullable String value) {
++        ListPreference preset = findPreference(AppearanceManager.KEY_THEME_PRESET);
++        if (preset == null) return;
++        if ("custom".equals(value)) {
++            preset.setSummary(R.string.termux_appearance_theme_custom);
++        } else if (value == null || AppearanceManager.PRESET_DEFAULT.equals(value)) {
++            preset.setSummary(R.string.termux_appearance_theme_default);
++        } else {
++            preset.setSummary(prettify(value));
++        }
++    }
++
++    /** "tokyo_night" -> "Tokyo Night". */
++    private static String prettify(String name) {
++        StringBuilder sb = new StringBuilder();
++        for (String part : name.split("[_-]")) {
++            if (part.isEmpty()) continue;
++            if (sb.length() > 0) sb.append(' ');
++            sb.append(part.substring(0, 1).toUpperCase(Locale.ROOT)).append(part.substring(1));
++        }
++        return sb.toString();
++    }
++}
+diff --git a/app/src/main/java/com/termux/app/fragments/settings/termux/ColorsPreferencesFragment.java b/app/src/main/java/com/termux/app/fragments/settings/termux/ColorsPreferencesFragment.java
+new file mode 100644
+index 0000000..62a40d7
+--- /dev/null
++++ b/app/src/main/java/com/termux/app/fragments/settings/termux/ColorsPreferencesFragment.java
+@@ -0,0 +1,133 @@
++package com.termux.app.fragments.settings.termux;
++
++import android.content.Context;
++import android.graphics.Color;
++import android.graphics.drawable.GradientDrawable;
++import android.os.Bundle;
++import android.widget.Toast;
++
++import androidx.annotation.Keep;
++import androidx.annotation.NonNull;
++import androidx.preference.EditTextPreference;
++import androidx.preference.Preference;
++import androidx.preference.PreferenceCategory;
++import androidx.preference.PreferenceFragmentCompat;
++import androidx.preference.PreferenceScreen;
++
++import com.termux.R;
++import com.termux.app.appearance.AppearanceManager;
++import com.termux.terminal.TerminalColors;
++import com.termux.terminal.TextStyle;
++
++import java.util.Map;
++import java.util.TreeMap;
++
++/**
++ * Edits foreground, background, cursor and the 16 ANSI colors. Changes are written straight to
++ * {@code ~/.termux/colors.properties}, on top of whatever theme preset is currently installed.
++ */
++@Keep
++public class ColorsPreferencesFragment extends PreferenceFragmentCompat {
++
++    /** Colors as stored in colors.properties; only keys the user or a preset set are present. */
++    private final Map<String, String> mColors = new TreeMap<>();
++
++    @Override
++    public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
++        PreferenceScreen screen = getPreferenceManager().createPreferenceScreen(requireContext());
++        setPreferenceScreen(screen);
++        build(screen);
++    }
++
++    private void build(@NonNull PreferenceScreen screen) {
++        final Context context = requireContext();
++
++        mColors.clear();
++        for (Map.Entry<Object, Object> e : AppearanceManager.readColorProperties().entrySet()) {
++            mColors.put((String) e.getKey(), (String) e.getValue());
++        }
++
++        PreferenceCategory category = new PreferenceCategory(context);
++        category.setTitle(R.string.termux_appearance_colors_header);
++        screen.addPreference(category);
++
++        for (final String key : AppearanceManager.getColorKeys()) {
++            final EditTextPreference pref = new EditTextPreference(context);
++            pref.setKey("color_edit_" + key);
++            pref.setPersistent(false);
++            pref.setTitle(key);
++            pref.setDialogTitle(key);
++
++            String hex = currentHex(key);
++            pref.setText(hex);
++            pref.setSummary(hex);
++            pref.setIcon(swatch(context, hex));
++            pref.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
++                @Override
++                public boolean onPreferenceChange(Preference preference, Object newValue) {
++                    String value = newValue == null ? "" : ((String) newValue).trim();
++                    if (!value.startsWith("#")) value = "#" + value;
++                    if (!AppearanceManager.isValidHexColor(value)) {
++                        Toast.makeText(context, R.string.termux_appearance_colors_invalid, Toast.LENGTH_SHORT).show();
++                        return false;
++                    }
++                    value = value.toLowerCase(java.util.Locale.ROOT);
++
++                    mColors.put(key, value);
++                    if (!AppearanceManager.writeColorProperties(context, mColors)) return false;
++
++                    pref.setText(value);
++                    pref.setSummary(value);
++                    pref.setIcon(swatch(context, value));
++                    // We stored the normalised value ourselves, so do not let the preference store the raw input.
++                    return false;
++                }
++            });
++            category.addPreference(pref);
++        }
++
++        Preference reset = new Preference(context);
++        reset.setKey("colors_reset");
++        reset.setPersistent(false);
++        reset.setTitle(R.string.termux_appearance_colors_reset_title);
++        reset.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
++            @Override
++            public boolean onPreferenceClick(Preference preference) {
++                if (AppearanceManager.applyPreset(context, AppearanceManager.PRESET_DEFAULT)) {
++                    PreferenceScreen s = getPreferenceScreen();
++                    s.removeAll();
++                    build(s);
++                }
++                return true;
++            }
++        });
++        screen.addPreference(reset);
++    }
++
++    /** The color as it is set in the colors file, falling back to the app's current default for that slot. */
++    @NonNull
++    private String currentHex(@NonNull String key) {
++        String fromFile = mColors.get(key);
++        if (AppearanceManager.isValidHexColor(fromFile)) return fromFile.toLowerCase(java.util.Locale.ROOT);
++
++        int index;
++        if (key.equals("foreground")) index = TextStyle.COLOR_INDEX_FOREGROUND;
++        else if (key.equals("background")) index = TextStyle.COLOR_INDEX_BACKGROUND;
++        else if (key.equals("cursor")) index = TextStyle.COLOR_INDEX_CURSOR;
++        else index = Integer.parseInt(key.substring("color".length()));
++
++        int argb = TerminalColors.COLOR_SCHEME.mDefaultColors[index];
++        return String.format("#%06x", argb & 0xFFFFFF);
++    }
++
++    private static GradientDrawable swatch(Context context, String hex) {
++        float density = context.getResources().getDisplayMetrics().density;
++        int size = Math.round(28 * density);
++        GradientDrawable d = new GradientDrawable();
++        d.setShape(GradientDrawable.OVAL);
++        d.setColor(Color.parseColor(hex));
++        d.setStroke(Math.max(1, Math.round(density)), 0x66888888);
++        d.setSize(size, size);
++        return d;
++    }
++}
+diff --git a/app/src/main/java/com/termux/app/terminal/TermuxTerminalSessionActivityClient.java b/app/src/main/java/com/termux/app/terminal/TermuxTerminalSessionActivityClient.java
+index bd78914..685e57c 100644
+--- a/app/src/main/java/com/termux/app/terminal/TermuxTerminalSessionActivityClient.java
++++ b/app/src/main/java/com/termux/app/terminal/TermuxTerminalSessionActivityClient.java
+@@ -11,6 +11,7 @@ import android.graphics.Typeface;
+ import android.media.AudioAttributes;
+ import android.media.SoundPool;
+ import android.text.TextUtils;
++import android.widget.ImageView;
+ import android.widget.ListView;
+ 
+ import androidx.annotation.NonNull;
+@@ -21,6 +22,7 @@ import com.termux.shared.interact.ShareUtils;
+ import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
+ import com.termux.shared.termux.interact.TextInputDialogUtils;
+ import com.termux.app.TermuxActivity;
++import com.termux.app.appearance.AppearanceManager;
+ import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
+ import com.termux.shared.termux.TermuxConstants;
+ import com.termux.app.TermuxService;
+@@ -50,6 +52,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
+ 
+     private static final String LOG_TAG = "TermuxTerminalSessionActivityClient";
+ 
++    /** Appearance settings version last applied, see {@link AppearanceManager#getStyleVersion}. */
++    private long mLastStyleVersion = -1;
++
+     public TermuxTerminalSessionActivityClient(TermuxActivity activity) {
+         this.mActivity = activity;
+     }
+@@ -66,6 +71,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
+      * Should be called when mActivity.onStart() is called
+      */
+     public void onStart() {
++        // The Appearance settings screen is a separate activity, so pick up any wallpaper, font or
++        // color changes made there when we come back to the foreground.
++        if (AppearanceManager.getStyleVersion(mActivity) != mLastStyleVersion) {
++            checkForFontAndColors();
++        }
++
+         // The service has connected, but data may have changed since we were last in the foreground.
+         // Get the session stored in shared preferences stored by {@link #onStop} if its valid,
+         // otherwise get the last session currently running.
+@@ -512,6 +523,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
+ 
+             final Typeface newTypeface = (fontFile.exists() && fontFile.length() > 0) ? Typeface.createFromFile(fontFile) : Typeface.MONOSPACE;
+             mActivity.getTerminalView().setTypeface(newTypeface);
++
++            mLastStyleVersion = AppearanceManager.getStyleVersion(mActivity);
++            mActivity.getTerminalView().setHasContentBehind(AppearanceManager.isWallpaperEnabled(mActivity));
++            AppearanceManager.applyWallpaper(mActivity, (ImageView) mActivity.findViewById(R.id.terminal_wallpaper_view));
+         } catch (Exception e) {
+             Logger.logStackTraceWithMessage(LOG_TAG, "Error in checkForFontAndColors()", e);
+         }
+diff --git a/app/src/main/res/layout/activity_termux.xml b/app/src/main/res/layout/activity_termux.xml
+index 831ea7c..d13bd52 100644
+--- a/app/src/main/res/layout/activity_termux.xml
++++ b/app/src/main/res/layout/activity_termux.xml
+@@ -23,15 +23,32 @@
+             android:layout_above="@+id/terminal_toolbar_view_pager"
+             android:layout_height="match_parent">
+ 
+-            <com.termux.view.TerminalView
+-                android:id="@+id/terminal_view"
++            <FrameLayout
++                android:id="@+id/terminal_content_frame"
+                 android:layout_width="match_parent"
+-                android:layout_height="match_parent"
+-                android:defaultFocusHighlightEnabled="false"
+-                android:focusableInTouchMode="true"
+-                android:scrollbarThumbVertical="@drawable/terminal_scroll_shape"
+-                android:scrollbars="vertical"
+-                tools:ignore="UnusedAttribute" />
++                android:layout_height="match_parent">
++
++                <!-- Optional wallpaper, shown behind the terminal. Hidden unless enabled in Appearance settings. -->
++                <ImageView
++                    android:id="@+id/terminal_wallpaper_view"
++                    android:layout_width="match_parent"
++                    android:layout_height="match_parent"
++                    android:scaleType="centerCrop"
++                    android:visibility="gone"
++                    android:importantForAccessibility="no"
++                    android:contentDescription="@null" />
++
++                <com.termux.view.TerminalView
++                    android:id="@+id/terminal_view"
++                    android:layout_width="match_parent"
++                    android:layout_height="match_parent"
++                    android:defaultFocusHighlightEnabled="false"
++                    android:focusableInTouchMode="true"
++                    android:scrollbarThumbVertical="@drawable/terminal_scroll_shape"
++                    android:scrollbars="vertical"
++                    tools:ignore="UnusedAttribute" />
++
++            </FrameLayout>
+ 
+             <LinearLayout
+                 android:id="@+id/left_drawer"
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index cbd2992..9bbe22c 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -235,4 +235,36 @@
+     <!-- Donate Preference -->
+     <string name="donate_preference_title">Donate</string>
+ 
++    <!-- Appearance Preferences -->
++    <string name="termux_appearance_preferences_title">Appearance</string>
++    <string name="termux_appearance_preferences_summary">Wallpaper, blur, fonts and color themes</string>
++
++    <string name="termux_appearance_wallpaper_header">Wallpaper</string>
++    <string name="termux_appearance_wallpaper_enabled_title">Show wallpaper</string>
++    <string name="termux_appearance_wallpaper_enabled_summary">Draw an image behind the terminal text</string>
++    <string name="termux_appearance_wallpaper_pick_title">Choose wallpaper image</string>
++    <string name="termux_appearance_wallpaper_pick_summary_none">No image selected</string>
++    <string name="termux_appearance_wallpaper_pick_summary_set">Tap to pick a different image</string>
++    <string name="termux_appearance_wallpaper_blur_title">Blur</string>
++    <string name="termux_appearance_wallpaper_dim_title">Dim</string>
++    <string name="termux_appearance_wallpaper_remove_title">Remove wallpaper</string>
++    <string name="termux_appearance_wallpaper_import_failed">Could not use that image</string>
++
++    <string name="termux_appearance_font_header">Font</string>
++    <string name="termux_appearance_font_pick_title">Choose font file</string>
++    <string name="termux_appearance_font_pick_summary_default">Using the default monospace font. Pick a .ttf or .otf file.</string>
++    <string name="termux_appearance_font_pick_summary_custom">Using a custom font. Tap to pick a different one.</string>
++    <string name="termux_appearance_font_reset_title">Reset to default font</string>
++    <string name="termux_appearance_font_import_failed">That is not a usable font file</string>
++
++    <string name="termux_appearance_theme_header">Colors</string>
++    <string name="termux_appearance_theme_preset_title">Color theme</string>
++    <string name="termux_appearance_theme_default">Termux default</string>
++    <string name="termux_appearance_theme_custom">Custom colors</string>
++    <string name="termux_appearance_custom_colors_title">Edit colors</string>
++    <string name="termux_appearance_custom_colors_summary">Foreground, background, cursor and the 16 ANSI colors</string>
++    <string name="termux_appearance_colors_reset_title">Reset colors to default</string>
++    <string name="termux_appearance_colors_invalid">Use the format #rrggbb</string>
++    <string name="termux_appearance_colors_header">Colors (hex, #rrggbb)</string>
++
+ </resources>
+diff --git a/app/src/main/res/xml/termux_appearance_preferences.xml b/app/src/main/res/xml/termux_appearance_preferences.xml
+new file mode 100644
+index 0000000..c4300cc
+--- /dev/null
++++ b/app/src/main/res/xml/termux_appearance_preferences.xml
+@@ -0,0 +1,79 @@
++<PreferenceScreen
++    xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto">
++
++    <PreferenceCategory
++        app:key="wallpaper"
++        app:title="@string/termux_appearance_wallpaper_header">
++
++        <SwitchPreferenceCompat
++            app:key="wallpaper_enabled"
++            app:defaultValue="false"
++            app:title="@string/termux_appearance_wallpaper_enabled_title"
++            app:summary="@string/termux_appearance_wallpaper_enabled_summary" />
++
++        <Preference
++            app:key="wallpaper_pick"
++            app:persistent="false"
++            app:title="@string/termux_appearance_wallpaper_pick_title" />
++
++        <SeekBarPreference
++            app:key="wallpaper_blur"
++            app:defaultValue="0"
++            app:min="0"
++            android:max="40"
++            app:seekBarIncrement="1"
++            app:showSeekBarValue="true"
++            app:title="@string/termux_appearance_wallpaper_blur_title" />
++
++        <SeekBarPreference
++            app:key="wallpaper_dim"
++            app:defaultValue="30"
++            app:min="0"
++            android:max="90"
++            app:seekBarIncrement="5"
++            app:showSeekBarValue="true"
++            app:title="@string/termux_appearance_wallpaper_dim_title" />
++
++        <Preference
++            app:key="wallpaper_remove"
++            app:persistent="false"
++            app:title="@string/termux_appearance_wallpaper_remove_title" />
++
++    </PreferenceCategory>
++
++    <PreferenceCategory
++        app:key="font"
++        app:title="@string/termux_appearance_font_header">
++
++        <Preference
++            app:key="font_pick"
++            app:persistent="false"
++            app:title="@string/termux_appearance_font_pick_title" />
++
++        <Preference
++            app:key="font_reset"
++            app:persistent="false"
++            app:title="@string/termux_appearance_font_reset_title" />
++
++    </PreferenceCategory>
++
++    <PreferenceCategory
++        app:key="colors"
++        app:title="@string/termux_appearance_theme_header">
++
++        <!-- Entries are filled in from the bundled presets by AppearancePreferencesFragment. -->
++        <ListPreference
++            app:key="theme_preset"
++            app:defaultValue="default"
++            app:title="@string/termux_appearance_theme_preset_title" />
++
++        <Preference
++            app:key="custom_colors"
++            app:title="@string/termux_appearance_custom_colors_title"
++            app:summary="@string/termux_appearance_custom_colors_summary"
++            app:fragment="com.termux.app.fragments.settings.termux.ColorsPreferencesFragment" />
++
++    </PreferenceCategory>
++
++</PreferenceScreen>
+diff --git a/app/src/main/res/xml/termux_preferences.xml b/app/src/main/res/xml/termux_preferences.xml
+index 90353c5..dc5f8dc 100644
+--- a/app/src/main/res/xml/termux_preferences.xml
++++ b/app/src/main/res/xml/termux_preferences.xml
+@@ -1,5 +1,10 @@
+ <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+ 
++    <Preference
++        app:title="@string/termux_appearance_preferences_title"
++        app:summary="@string/termux_appearance_preferences_summary"
++        app:fragment="com.termux.app.fragments.settings.termux.AppearancePreferencesFragment"/>
++
+     <Preference
+         app:title="@string/termux_debugging_preferences_title"
+         app:summary="@string/termux_debugging_preferences_summary"
+diff --git a/terminal-view/src/main/java/com/termux/view/TerminalView.java b/terminal-view/src/main/java/com/termux/view/TerminalView.java
+index f4f82ad..2cf0785 100644
+--- a/terminal-view/src/main/java/com/termux/view/TerminalView.java
++++ b/terminal-view/src/main/java/com/termux/view/TerminalView.java
+@@ -528,9 +528,22 @@ public final class TerminalView extends View {
+         return true;
+     }
+ 
++    /**
++     * Set when something (like a wallpaper) is drawn behind this view. The renderer skips cells that
++     * use the default background, so the view must not claim to be opaque or the area behind it
++     * may not be redrawn correctly.
++     */
++    private boolean mHasContentBehind = false;
++
++    public void setHasContentBehind(boolean hasContentBehind) {
++        if (mHasContentBehind == hasContentBehind) return;
++        mHasContentBehind = hasContentBehind;
++        invalidate();
++    }
++
+     @Override
+     public boolean isOpaque() {
+-        return true;
++        return !mHasContentBehind;
+     }
+ 
+     /**
+-- 
+2.43.0
+

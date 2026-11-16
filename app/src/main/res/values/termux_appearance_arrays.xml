@@ -1,50 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- Order must match AppearanceManager.getColorKeys():
-         foreground, background, cursor, then color0 to color15. -->
-    <string-array name="termux_appearance_color_titles">
-        <item>Text (foreground)</item>
-        <item>Background</item>
-        <item>Cursor</item>
-        <item>Black (color0)</item>
-        <item>Red (color1)</item>
-        <item>Green (color2)</item>
-        <item>Yellow (color3)</item>
-        <item>Blue (color4)</item>
-        <item>Magenta (color5)</item>
-        <item>Cyan (color6)</item>
-        <item>White (color7)</item>
-        <item>Bright black (color8)</item>
-        <item>Bright red (color9)</item>
-        <item>Bright green (color10)</item>
-        <item>Bright yellow (color11)</item>
-        <item>Bright blue (color12)</item>
-        <item>Bright magenta (color13)</item>
-        <item>Bright cyan (color14)</item>
-        <item>Bright white (color15)</item>
-    </string-array>
-
+    <!-- One line under each color in Edit colors, saying which part of the terminal it controls.
+         Order must match AppearanceManager.getColorKeys():
+         foreground, background, cursor, then color0 to color15.
+         These describe what each slot is used for, never what hue it has, because the
+         hue is whatever the theme or the user sets. -->
     <string-array name="termux_appearance_color_descriptions">
-        <item>Default text color: what you type and most program output.</item>
+        <item>Default text: what you type and most program output.</item>
         <item>Terminal background, behind the text. With a wallpaper on, the wallpaper shows instead wherever this color would be.</item>
-        <item>The blinking block or bar that shows where you are typing.</item>
-        <item>Normal black. Used by programs for dark text and shadows, and as a background for status bars.</item>
+        <item>The block or bar that shows where you are typing.</item>
+        <item>Dark items: status bar backgrounds, shadows and text meant to blend into the background.</item>
         <item>Errors and failures, deleted lines in diffs, and archives in ls.</item>
         <item>Success and OK messages, added lines in diffs, and executable files in ls.</item>
         <item>Warnings, modified files and highlights.</item>
-        <item>Directories in ls, links and informational text. Often the hardest color to read on dark themes.</item>
+        <item>Directories in ls, links and informational text.</item>
         <item>Special files, keywords in code editors and prompt decorations.</item>
         <item>Symbolic links in ls, strings in code and informational text.</item>
-        <item>Normal light gray text. Many programs use this instead of the default text color.</item>
-        <item>Dark gray: comments in code, hints, and dimmed or disabled text.</item>
-        <item>Brighter red: bold or emphasized errors.</item>
-        <item>Brighter green: bold or emphasized success, and bold executables.</item>
-        <item>Brighter yellow: bold warnings and strong highlights.</item>
-        <item>Brighter blue: bold directories in ls and bold links.</item>
-        <item>Brighter magenta: bold special files and emphasized keywords.</item>
-        <item>Brighter cyan: bold symbolic links and emphasized strings.</item>
-        <item>Pure white: bold text and emphasized output.</item>
+        <item>Normal light text that many programs use instead of the default text color.</item>
+        <item>Comments in code, hints, and dimmed or disabled text.</item>
+        <item>Bold or emphasized version of color1: errors and failures.</item>
+        <item>Bold or emphasized version of color2: success messages and bold executables.</item>
+        <item>Bold or emphasized version of color3: warnings and strong highlights.</item>
+        <item>Bold or emphasized version of color4: bold directories in ls and bold links.</item>
+        <item>Bold or emphasized version of color5: bold special files and emphasized keywords.</item>
+        <item>Bold or emphasized version of color6: bold symbolic links and emphasized strings.</item>
+        <item>Bold text and the brightest text in many programs.</item>
     </string-array>
 
     <string-array name="termux_appearance_ui_mode_entries">

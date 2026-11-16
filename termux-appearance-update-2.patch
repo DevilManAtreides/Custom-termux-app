@@ -1,0 +1,1331 @@
+From 8c4297fd68bd92fe4c600a2ef6182c08bf3869d8 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 15 Nov 2026 22:10:43 +0000
+Subject: [PATCH] Appearance: color wheel picker, themed Settings, fixes for
+ extra keys and wallpaper
+
+- Extra keys: buttons start in the same background they return to when released,
+  and that background is transparent while a wallpaper is on, so keys that have
+  been pressed no longer look held down over the wallpaper
+- Wallpaper keeps one size when the keyboard opens (StableWallpaperView remembers
+  the keyboard-down height; the parent clips the rest)
+- Settings top bar, status bar, switches and sliders follow the terminal theme by
+  default, or Termux red, or a custom color (Appearance > Settings look)
+- Color editor: color wheel + brightness slider + hex field in one dialog, and a
+  name and description under every color
+- ColorMath: Android-free HSV/hex/contrast helpers
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_016cyqPmKVt5ExSeVFn51HQf
+---
+ .../app/activities/SettingsActivity.java      |   5 +
+ .../app/appearance/AppearanceManager.java     |  56 +++++
+ .../com/termux/app/appearance/ColorMath.java  | 124 +++++++++++
+ .../app/appearance/ColorPickerDialog.java     | 183 ++++++++++++++++
+ .../termux/app/appearance/ColorWheelView.java | 195 ++++++++++++++++++
+ .../termux/app/appearance/SettingsStyler.java | 177 ++++++++++++++++
+ .../app/appearance/StableWallpaperView.java   |  49 +++++
+ .../termux/AppearancePreferencesFragment.java |  83 ++++++++
+ .../termux/ColorsPreferencesFragment.java     |  89 ++++----
+ .../terminal/io/TerminalToolbarViewPager.java |   2 +
+ app/src/main/res/layout/activity_termux.xml   |   2 +-
+ app/src/main/res/values/strings.xml           |  12 +-
+ .../res/values/termux_appearance_arrays.xml   |  62 ++++++
+ .../res/xml/termux_appearance_preferences.xml |  20 ++
+ .../termux/extrakeys/ExtraKeysView.java       |   3 +
+ 15 files changed, 1018 insertions(+), 44 deletions(-)
+ create mode 100644 app/src/main/java/com/termux/app/appearance/ColorMath.java
+ create mode 100644 app/src/main/java/com/termux/app/appearance/ColorPickerDialog.java
+ create mode 100644 app/src/main/java/com/termux/app/appearance/ColorWheelView.java
+ create mode 100644 app/src/main/java/com/termux/app/appearance/SettingsStyler.java
+ create mode 100644 app/src/main/java/com/termux/app/appearance/StableWallpaperView.java
+ create mode 100644 app/src/main/res/values/termux_appearance_arrays.xml
+
+diff --git a/app/src/main/java/com/termux/app/activities/SettingsActivity.java b/app/src/main/java/com/termux/app/activities/SettingsActivity.java
+index 7ca7848..6ad316a 100644
+--- a/app/src/main/java/com/termux/app/activities/SettingsActivity.java
++++ b/app/src/main/java/com/termux/app/activities/SettingsActivity.java
+@@ -10,6 +10,7 @@ import androidx.preference.Preference;
+ import androidx.preference.PreferenceFragmentCompat;
+ 
+ import com.termux.R;
++import com.termux.app.appearance.SettingsStyler;
+ import com.termux.shared.activities.ReportActivity;
+ import com.termux.shared.file.FileUtils;
+ import com.termux.shared.models.ReportInfo;
+@@ -44,6 +45,10 @@ public class SettingsActivity extends AppCompatActivity {
+ 
+         AppCompatActivityUtils.setToolbar(this, com.termux.shared.R.id.toolbar);
+         AppCompatActivityUtils.setShowBackButtonInActionBar(this, true);
++
++        // Top bar, status bar and switch/slider colors, see Settings > Termux > Appearance.
++        SettingsStyler.apply(this);
++        SettingsStyler.installFragmentTinting(this);
+     }
+ 
+     @Override
+diff --git a/app/src/main/java/com/termux/app/appearance/AppearanceManager.java b/app/src/main/java/com/termux/app/appearance/AppearanceManager.java
+index a3d0fdb..92f1689 100644
+--- a/app/src/main/java/com/termux/app/appearance/AppearanceManager.java
++++ b/app/src/main/java/com/termux/app/appearance/AppearanceManager.java
+@@ -19,8 +19,13 @@ import androidx.annotation.NonNull;
+ import androidx.annotation.Nullable;
+ 
+ import com.termux.R;
++import com.termux.app.TermuxActivity;
+ import com.termux.shared.logger.Logger;
+ import com.termux.shared.termux.TermuxConstants;
++import com.termux.shared.termux.extrakeys.ExtraKeysView;
++import com.termux.shared.theme.ThemeUtils;
++import com.termux.terminal.TerminalColors;
++import com.termux.terminal.TextStyle;
+ 
+ import java.io.File;
+ import java.io.FileInputStream;
+@@ -55,6 +60,10 @@ public final class AppearanceManager {
+     public static final String KEY_WALLPAPER_BLUR = "wallpaper_blur";
+     public static final String KEY_WALLPAPER_DIM = "wallpaper_dim";
+     public static final String KEY_THEME_PRESET = "theme_preset";
++    /** How the Settings screens are colored: see {@link SettingsStyler#MODE_TERMINAL} and friends. */
++    public static final String KEY_UI_MODE = "ui_style_mode";
++    /** {@code #rrggbb} used when {@link #KEY_UI_MODE} is {@link SettingsStyler#MODE_CUSTOM}. */
++    public static final String KEY_UI_COLOR = "ui_custom_color";
+     /** Bumped whenever anything changes, so the terminal activity knows to re-apply on return. */
+     public static final String KEY_STYLE_VERSION = "style_version";
+ 
+@@ -187,6 +196,7 @@ public final class AppearanceManager {
+         if (toolbar != null) {
+             toolbar.setBackgroundColor(enabled ? 0x99000000 : Color.BLACK);
+         }
++        applyExtraKeysStyle(activity);
+ 
+         if (!enabled) {
+             sAppliedKey = null;
+@@ -236,6 +246,52 @@ public final class AppearanceManager {
+         });
+     }
+ 
++    /**
++     * Makes the extra keys' resting background match the bar behind them.
++     *
++     * The keys start out transparent but go back to the theme's solid black every time one is
++     * released. Over a translucent bar that makes every key you have touched look different
++     * (pressed in) from the ones you have not, so with a wallpaper the resting color is
++     * transparent too. Without one it is the theme color, exactly as stock Termux.
++     * Safe to call before the extra keys exist: it does nothing until they do.
++     */
++    public static void applyExtraKeysStyle(@NonNull Activity activity) {
++        if (!(activity instanceof TermuxActivity)) return;
++        ExtraKeysView keys = ((TermuxActivity) activity).getExtraKeysView();
++        if (keys == null) return;
++
++        int resting = isWallpaperEnabled(activity)
++            ? Color.TRANSPARENT
++            : ThemeUtils.getSystemAttrColor(activity, ExtraKeysView.ATTR_BUTTON_BACKGROUND_COLOR,
++                ExtraKeysView.DEFAULT_BUTTON_BACKGROUND_COLOR);
++
++        keys.setButtonBackgroundColor(resting);
++        for (int i = 0; i < keys.getChildCount(); i++) {
++            keys.getChildAt(i).setBackgroundColor(resting);
++        }
++    }
++
++    // ---------------------------------------------------------------- color lookups
++
++    /** The terminal's built-in color for a colors.properties key, as {@code #rrggbb}. */
++    @NonNull
++    public static String defaultColorHex(@NonNull String key) {
++        int index;
++        if (key.equals("foreground")) index = TextStyle.COLOR_INDEX_FOREGROUND;
++        else if (key.equals("background")) index = TextStyle.COLOR_INDEX_BACKGROUND;
++        else if (key.equals("cursor")) index = TextStyle.COLOR_INDEX_CURSOR;
++        else index = Integer.parseInt(key.substring("color".length()));
++        return ColorMath.toHex(TerminalColors.COLOR_SCHEME.mDefaultColors[index]);
++    }
++
++    /** The color the terminal uses for a key: from colors.properties if set there, else the built-in one. */
++    @NonNull
++    public static String getEffectiveColorHex(@NonNull String key) {
++        String fromFile = readColorProperties().getProperty(key);
++        Integer parsed = ColorMath.parseHex(fromFile);
++        return parsed != null ? ColorMath.toHex(parsed) : defaultColorHex(key);
++    }
++
+     private static Bitmap blurScaled(Bitmap src, int radius) {
+         int w = src.getWidth();
+         int h = src.getHeight();
+diff --git a/app/src/main/java/com/termux/app/appearance/ColorMath.java b/app/src/main/java/com/termux/app/appearance/ColorMath.java
+new file mode 100644
+index 0000000..706afab
+--- /dev/null
++++ b/app/src/main/java/com/termux/app/appearance/ColorMath.java
+@@ -0,0 +1,124 @@
++package com.termux.app.appearance;
++
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++
++/**
++ * Small, Android-free color helpers (HSV conversion, hex parsing, contrast). Kept free of
++ * android.* classes so the logic can be unit tested on a plain JVM.
++ */
++public final class ColorMath {
++
++    private ColorMath() {}
++
++    /** Converts 0xRRGGBB (alpha ignored) to {hue 0..360, saturation 0..1, value 0..1}. */
++    @NonNull
++    public static float[] rgbToHsv(int rgb) {
++        float r = ((rgb >> 16) & 0xFF) / 255f;
++        float g = ((rgb >> 8) & 0xFF) / 255f;
++        float b = (rgb & 0xFF) / 255f;
++
++        float max = Math.max(r, Math.max(g, b));
++        float min = Math.min(r, Math.min(g, b));
++        float delta = max - min;
++
++        float h;
++        if (delta == 0f) {
++            h = 0f;
++        } else if (max == r) {
++            h = 60f * (((g - b) / delta) % 6f);
++        } else if (max == g) {
++            h = 60f * (((b - r) / delta) + 2f);
++        } else {
++            h = 60f * (((r - g) / delta) + 4f);
++        }
++        if (h < 0f) h += 360f;
++
++        float s = max == 0f ? 0f : delta / max;
++        return new float[]{h, s, max};
++    }
++
++    /** Converts hue 0..360, saturation 0..1, value 0..1 to an opaque 0xFFRRGGBB color. */
++    public static int hsvToRgb(float h, float s, float v) {
++        h = ((h % 360f) + 360f) % 360f;
++        s = clamp01(s);
++        v = clamp01(v);
++
++        float c = v * s;
++        float x = c * (1f - Math.abs(((h / 60f) % 2f) - 1f));
++        float m = v - c;
++
++        float r, g, b;
++        if (h < 60f)       { r = c; g = x; b = 0; }
++        else if (h < 120f) { r = x; g = c; b = 0; }
++        else if (h < 180f) { r = 0; g = c; b = x; }
++        else if (h < 240f) { r = 0; g = x; b = c; }
++        else if (h < 300f) { r = x; g = 0; b = c; }
++        else               { r = c; g = 0; b = x; }
++
++        int ri = Math.round((r + m) * 255f);
++        int gi = Math.round((g + m) * 255f);
++        int bi = Math.round((b + m) * 255f);
++        return 0xFF000000 | (ri << 16) | (gi << 8) | bi;
++    }
++
++    /** Formats as lowercase {@code #rrggbb}. */
++    @NonNull
++    public static String toHex(int rgb) {
++        return String.format("#%06x", rgb & 0xFFFFFF);
++    }
++
++    /** True for {@code #rrggbb} or {@code rrggbb}. */
++    public static boolean isValidHex(@Nullable String text) {
++        return parseHex(text) != null;
++    }
++
++    /** Parses {@code #rrggbb} or {@code rrggbb} to an opaque 0xFFRRGGBB color, or null if invalid. */
++    @Nullable
++    public static Integer parseHex(@Nullable String text) {
++        if (text == null) return null;
++        String t = text.trim();
++        if (t.startsWith("#")) t = t.substring(1);
++        if (t.length() != 6) return null;
++        for (int i = 0; i < 6; i++) {
++            if (Character.digit(t.charAt(i), 16) < 0) return null;
++        }
++        return 0xFF000000 | Integer.parseInt(t, 16);
++    }
++
++    /** WCAG relative luminance, 0 (black) to 1 (white). */
++    public static double luminance(int rgb) {
++        return 0.2126 * channel((rgb >> 16) & 0xFF) + 0.7152 * channel((rgb >> 8) & 0xFF) + 0.0722 * channel(rgb & 0xFF);
++    }
++
++    /** WCAG contrast ratio, 1 (identical) to 21 (black on white). */
++    public static double contrast(int a, int b) {
++        double la = luminance(a);
++        double lb = luminance(b);
++        double hi = Math.max(la, lb);
++        double lo = Math.min(la, lb);
++        return (hi + 0.05) / (lo + 0.05);
++    }
++
++    /** Black or white, whichever is easier to read on {@code background}. */
++    public static int readableOn(int background) {
++        return contrast(0xFFFFFFFF, background) >= contrast(0xFF000000, background) ? 0xFFFFFFFF : 0xFF000000;
++    }
++
++    /** Multiplies each channel by {@code factor} (below 1 darkens). Result is opaque. */
++    public static int scale(int rgb, float factor) {
++        int r = Math.min(255, Math.round(((rgb >> 16) & 0xFF) * factor));
++        int g = Math.min(255, Math.round(((rgb >> 8) & 0xFF) * factor));
++        int b = Math.min(255, Math.round((rgb & 0xFF) * factor));
++        return 0xFF000000 | (r << 16) | (g << 8) | b;
++    }
++
++    private static double channel(int c) {
++        double v = c / 255.0;
++        return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
++    }
++
++    private static float clamp01(float v) {
++        return Math.max(0f, Math.min(1f, v));
++    }
++}
+diff --git a/app/src/main/java/com/termux/app/appearance/ColorPickerDialog.java b/app/src/main/java/com/termux/app/appearance/ColorPickerDialog.java
+new file mode 100644
+index 0000000..4cfb0e3
+--- /dev/null
++++ b/app/src/main/java/com/termux/app/appearance/ColorPickerDialog.java
+@@ -0,0 +1,183 @@
++package com.termux.app.appearance;
++
++import android.content.Context;
++import android.content.res.ColorStateList;
++import android.graphics.Color;
++import android.graphics.Typeface;
++import android.graphics.drawable.GradientDrawable;
++import android.text.Editable;
++import android.text.InputFilter;
++import android.text.InputType;
++import android.text.TextWatcher;
++import android.view.Gravity;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.EditText;
++import android.widget.LinearLayout;
++import android.widget.ScrollView;
++import android.widget.SeekBar;
++import android.widget.TextView;
++
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++import androidx.appcompat.app.AlertDialog;
++
++import com.termux.R;
++
++/**
++ * Color picker with a hue/saturation wheel, a brightness slider and a hex field. The wheel, slider
++ * and hex field all stay in sync, and typing a valid {@code #rrggbb} moves the wheel to it.
++ */
++public final class ColorPickerDialog {
++
++    public interface Callback {
++        void onColorSelected(int rgb);
++    }
++
++    private ColorPickerDialog() {}
++
++    public static void show(@NonNull Context context, @NonNull CharSequence title, @Nullable CharSequence description,
++                            int initialRgb, @NonNull final Callback callback) {
++        final float density = context.getResources().getDisplayMetrics().density;
++        final int pad = Math.round(20 * density);
++
++        final int[] current = {initialRgb | 0xFF000000};
++        // True while one control is updating the others, so they do not echo changes back at each other.
++        final boolean[] updating = {false};
++
++        LinearLayout content = new LinearLayout(context);
++        content.setOrientation(LinearLayout.VERTICAL);
++        content.setPadding(pad, Math.round(8 * density), pad, 0);
++
++        if (description != null && description.length() > 0) {
++            TextView desc = new TextView(context);
++            desc.setText(description);
++            desc.setPadding(0, 0, 0, Math.round(8 * density));
++            content.addView(desc, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
++        }
++
++        final ColorWheelView wheel = new ColorWheelView(context);
++        LinearLayout.LayoutParams wheelParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(260 * density));
++        content.addView(wheel, wheelParams);
++
++        TextView brightnessLabel = new TextView(context);
++        brightnessLabel.setText(R.string.termux_appearance_picker_brightness);
++        brightnessLabel.setPadding(0, Math.round(8 * density), 0, 0);
++        content.addView(brightnessLabel);
++
++        final SeekBar brightness = new SeekBar(context);
++        brightness.setMax(100);
++        content.addView(brightness, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
++
++        LinearLayout row = new LinearLayout(context);
++        row.setOrientation(LinearLayout.HORIZONTAL);
++        row.setGravity(Gravity.CENTER_VERTICAL);
++        row.setPadding(0, Math.round(8 * density), 0, Math.round(8 * density));
++
++        final View swatch = new View(context);
++        final GradientDrawable swatchBg = new GradientDrawable();
++        swatchBg.setShape(GradientDrawable.RECTANGLE);
++        swatchBg.setCornerRadius(8 * density);
++        swatchBg.setStroke(Math.max(1, Math.round(density)), 0x66888888);
++        swatch.setBackground(swatchBg);
++        LinearLayout.LayoutParams swatchParams = new LinearLayout.LayoutParams(Math.round(48 * density), Math.round(48 * density));
++        swatchParams.rightMargin = Math.round(16 * density);
++        row.addView(swatch, swatchParams);
++
++        final EditText hex = new EditText(context);
++        hex.setSingleLine(true);
++        hex.setHint("#rrggbb");
++        hex.setTypeface(Typeface.MONOSPACE);
++        hex.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
++        hex.setFilters(new InputFilter[]{new InputFilter.LengthFilter(7)});
++        row.addView(hex, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
++        content.addView(row);
++
++        final ColorStateList normalHexColor = hex.getTextColors();
++
++        // Push the current color into every control except the one named in 'source'.
++        final Runnable refresh = new Runnable() {
++            @Override
++            public void run() {
++                swatchBg.setColor(current[0]);
++                swatch.invalidate();
++                ColorStateList tint = ColorStateList.valueOf(current[0]);
++                brightness.setProgressTintList(tint);
++                brightness.setThumbTintList(tint);
++            }
++        };
++
++        wheel.setListener(new ColorWheelView.Listener() {
++            @Override
++            public void onColorChanged(int rgb) {
++                if (updating[0]) return;
++                updating[0] = true;
++                current[0] = rgb;
++                hex.setText(ColorMath.toHex(rgb));
++                hex.setTextColor(normalHexColor);
++                refresh.run();
++                updating[0] = false;
++            }
++        });
++
++        brightness.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
++            @Override
++            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
++                if (!fromUser || updating[0]) return;
++                wheel.setBrightness(progress / 100f);
++            }
++
++            @Override
++            public void onStartTrackingTouch(SeekBar seekBar) {
++                if (seekBar.getParent() != null) seekBar.getParent().requestDisallowInterceptTouchEvent(true);
++            }
++
++            @Override
++            public void onStopTrackingTouch(SeekBar seekBar) {}
++        });
++
++        hex.addTextChangedListener(new TextWatcher() {
++            @Override
++            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
++
++            @Override
++            public void onTextChanged(CharSequence s, int start, int before, int count) {}
++
++            @Override
++            public void afterTextChanged(Editable s) {
++                if (updating[0]) return;
++                Integer parsed = ColorMath.parseHex(s.toString());
++                if (parsed == null) {
++                    // Partial or invalid input: keep the last good color, just flag the field.
++                    hex.setTextColor(Color.RED);
++                    return;
++                }
++                hex.setTextColor(normalHexColor);
++                updating[0] = true;
++                current[0] = parsed;
++                wheel.setColor(parsed);
++                brightness.setProgress(Math.round(wheel.getBrightness() * 100f));
++                refresh.run();
++                updating[0] = false;
++            }
++        });
++
++        // Initial state.
++        updating[0] = true;
++        wheel.setColor(current[0]);
++        brightness.setProgress(Math.round(wheel.getBrightness() * 100f));
++        hex.setText(ColorMath.toHex(current[0]));
++        refresh.run();
++        updating[0] = false;
++
++        ScrollView scroll = new ScrollView(context);
++        scroll.addView(content);
++
++        new AlertDialog.Builder(context)
++            .setTitle(title)
++            .setView(scroll)
++            .setPositiveButton(android.R.string.ok, (dialog, which) -> callback.onColorSelected(current[0]))
++            .setNegativeButton(android.R.string.cancel, null)
++            .show();
++    }
++}
+diff --git a/app/src/main/java/com/termux/app/appearance/ColorWheelView.java b/app/src/main/java/com/termux/app/appearance/ColorWheelView.java
+new file mode 100644
+index 0000000..250817a
+--- /dev/null
++++ b/app/src/main/java/com/termux/app/appearance/ColorWheelView.java
+@@ -0,0 +1,195 @@
++package com.termux.app.appearance;
++
++import android.content.Context;
++import android.graphics.Canvas;
++import android.graphics.Color;
++import android.graphics.Paint;
++import android.graphics.RadialGradient;
++import android.graphics.Shader;
++import android.graphics.SweepGradient;
++import android.util.AttributeSet;
++import android.view.MotionEvent;
++import android.view.View;
++
++import androidx.annotation.Nullable;
++
++/**
++ * A hue / saturation wheel. Brightness is not part of the wheel: set it with {@link #setBrightness}
++ * (the dialog drives it from a slider), and the wheel darkens to show it.
++ *
++ * The state is kept as separate hue, saturation and brightness values rather than recomputed from the
++ * resulting color, so the selector does not jump around when the brightness hits zero.
++ */
++public class ColorWheelView extends View {
++
++    public interface Listener {
++        void onColorChanged(int rgb);
++    }
++
++    private float mHue = 0f;
++    private float mSaturation = 0f;
++    private float mBrightness = 1f;
++
++    private float mCx, mCy, mRadius;
++    private final float mThumbRadius;
++
++    private final Paint mHuePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
++    private final Paint mSaturationPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
++    private final Paint mDimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
++    private final Paint mThumbFill = new Paint(Paint.ANTI_ALIAS_FLAG);
++    private final Paint mThumbOuter = new Paint(Paint.ANTI_ALIAS_FLAG);
++    private final Paint mThumbInner = new Paint(Paint.ANTI_ALIAS_FLAG);
++
++    @Nullable
++    private Listener mListener;
++
++    public ColorWheelView(Context context) {
++        this(context, null);
++    }
++
++    public ColorWheelView(Context context, @Nullable AttributeSet attrs) {
++        this(context, attrs, 0);
++    }
++
++    public ColorWheelView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
++        super(context, attrs, defStyleAttr);
++        float density = context.getResources().getDisplayMetrics().density;
++        mThumbRadius = 11f * density;
++
++        mThumbOuter.setStyle(Paint.Style.STROKE);
++        mThumbOuter.setStrokeWidth(3f * density);
++        mThumbOuter.setColor(Color.BLACK);
++        mThumbInner.setStyle(Paint.Style.STROKE);
++        mThumbInner.setStrokeWidth(1.5f * density);
++        mThumbInner.setColor(Color.WHITE);
++        mDimPaint.setStyle(Paint.Style.FILL);
++    }
++
++    public void setListener(@Nullable Listener listener) {
++        mListener = listener;
++    }
++
++    /** The currently selected color as opaque 0xFFRRGGBB. */
++    public int getColor() {
++        return ColorMath.hsvToRgb(mHue, mSaturation, mBrightness);
++    }
++
++    /** Sets the whole color (hue, saturation and brightness) without notifying the listener. */
++    public void setColor(int rgb) {
++        float[] hsv = ColorMath.rgbToHsv(rgb);
++        // Keep the old hue for greys and black, where the hue is undefined and would snap to red.
++        if (hsv[1] > 0f && hsv[2] > 0f) mHue = hsv[0];
++        mSaturation = hsv[1];
++        mBrightness = hsv[2];
++        invalidate();
++    }
++
++    public float getBrightness() {
++        return mBrightness;
++    }
++
++    /** Sets brightness (0..1) and notifies the listener. */
++    public void setBrightness(float brightness) {
++        mBrightness = Math.max(0f, Math.min(1f, brightness));
++        invalidate();
++        notifyChanged();
++    }
++
++    @Override
++    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
++        int w = MeasureSpec.getSize(widthMeasureSpec);
++        int h = MeasureSpec.getSize(heightMeasureSpec);
++        int wMode = MeasureSpec.getMode(widthMeasureSpec);
++        int hMode = MeasureSpec.getMode(heightMeasureSpec);
++        float density = getResources().getDisplayMetrics().density;
++        int preferred = Math.round(260 * density);
++
++        int size;
++        if (wMode == MeasureSpec.EXACTLY && hMode == MeasureSpec.EXACTLY) {
++            size = Math.min(w, h);
++        } else if (wMode == MeasureSpec.UNSPECIFIED && hMode == MeasureSpec.UNSPECIFIED) {
++            size = preferred;
++        } else {
++            int limit = Integer.MAX_VALUE;
++            if (wMode != MeasureSpec.UNSPECIFIED) limit = Math.min(limit, w);
++            if (hMode != MeasureSpec.UNSPECIFIED) limit = Math.min(limit, h);
++            size = Math.min(preferred, limit);
++        }
++        setMeasuredDimension(size, size);
++    }
++
++    @Override
++    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
++        super.onSizeChanged(w, h, oldw, oldh);
++        mCx = w / 2f;
++        mCy = h / 2f;
++        mRadius = Math.max(1f, Math.min(w, h) / 2f - mThumbRadius - 2f);
++
++        int[] hues = {0xFFFF0000, 0xFFFFFF00, 0xFF00FF00, 0xFF00FFFF, 0xFF0000FF, 0xFFFF00FF, 0xFFFF0000};
++        mHuePaint.setShader(new SweepGradient(mCx, mCy, hues, null));
++        mSaturationPaint.setShader(new RadialGradient(mCx, mCy, mRadius, 0xFFFFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
++    }
++
++    @Override
++    protected void onDraw(Canvas canvas) {
++        canvas.drawCircle(mCx, mCy, mRadius, mHuePaint);
++        canvas.drawCircle(mCx, mCy, mRadius, mSaturationPaint);
++
++        int dimAlpha = Math.round((1f - mBrightness) * 255f);
++        if (dimAlpha > 0) {
++            mDimPaint.setColor(Color.argb(dimAlpha, 0, 0, 0));
++            canvas.drawCircle(mCx, mCy, mRadius, mDimPaint);
++        }
++
++        double angle = Math.toRadians(mHue);
++        float tx = (float) (mCx + Math.cos(angle) * mSaturation * mRadius);
++        float ty = (float) (mCy + Math.sin(angle) * mSaturation * mRadius);
++        mThumbFill.setColor(getColor());
++        canvas.drawCircle(tx, ty, mThumbRadius, mThumbFill);
++        canvas.drawCircle(tx, ty, mThumbRadius, mThumbOuter);
++        canvas.drawCircle(tx, ty, mThumbRadius, mThumbInner);
++    }
++
++    @Override
++    public boolean onTouchEvent(MotionEvent event) {
++        switch (event.getActionMasked()) {
++            case MotionEvent.ACTION_DOWN:
++                if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
++                updateFromTouch(event.getX(), event.getY());
++                return true;
++            case MotionEvent.ACTION_MOVE:
++                updateFromTouch(event.getX(), event.getY());
++                return true;
++            case MotionEvent.ACTION_UP:
++                updateFromTouch(event.getX(), event.getY());
++                performClick();
++                return true;
++            case MotionEvent.ACTION_CANCEL:
++                return true;
++            default:
++                return super.onTouchEvent(event);
++        }
++    }
++
++    @Override
++    public boolean performClick() {
++        return super.performClick();
++    }
++
++    private void updateFromTouch(float x, float y) {
++        float dx = x - mCx;
++        float dy = y - mCy;
++        double distance = Math.sqrt(dx * dx + dy * dy);
++
++        float hue = (float) Math.toDegrees(Math.atan2(dy, dx));
++        if (hue < 0f) hue += 360f;
++        mHue = hue;
++        mSaturation = (float) Math.min(1.0, distance / mRadius);
++        invalidate();
++        notifyChanged();
++    }
++
++    private void notifyChanged() {
++        if (mListener != null) mListener.onColorChanged(getColor());
++    }
++}
+diff --git a/app/src/main/java/com/termux/app/appearance/SettingsStyler.java b/app/src/main/java/com/termux/app/appearance/SettingsStyler.java
+new file mode 100644
+index 0000000..14ac738
+--- /dev/null
++++ b/app/src/main/java/com/termux/app/appearance/SettingsStyler.java
+@@ -0,0 +1,177 @@
++package com.termux.app.appearance;
++
++import android.content.Context;
++import android.content.res.ColorStateList;
++import android.graphics.PorterDuff;
++import android.graphics.drawable.Drawable;
++import android.view.View;
++import android.view.ViewGroup;
++import android.view.Window;
++import android.widget.SeekBar;
++
++import androidx.annotation.NonNull;
++import androidx.appcompat.app.AppCompatActivity;
++import androidx.appcompat.widget.SwitchCompat;
++import androidx.appcompat.widget.Toolbar;
++import androidx.core.view.WindowInsetsControllerCompat;
++import androidx.fragment.app.Fragment;
++import androidx.fragment.app.FragmentManager;
++import androidx.preference.PreferenceFragmentCompat;
++import androidx.recyclerview.widget.RecyclerView;
++
++import com.termux.shared.theme.ThemeUtils;
++
++/**
++ * Colors the Settings screens: the top bar, the status bar, and the accent color of switches and
++ * sliders. By default it follows the terminal's own colors; it can also keep Termux's original red
++ * or use a color picked with the color wheel.
++ */
++public final class SettingsStyler {
++
++    public static final String MODE_TERMINAL = "terminal";
++    public static final String MODE_TERMUX = "termux";
++    public static final String MODE_CUSTOM = "custom";
++
++    public static final String DEFAULT_CUSTOM_COLOR = "#5c6bc0";
++
++    /** Termux's original settings colors, for MODE_TERMUX. */
++    private static final int TERMUX_TOOLBAR = 0xFFFF0000;
++    private static final int TERMUX_STATUS_BAR = 0xFFC4001D;
++
++    public static final class Style {
++        public int toolbarColor;
++        public int toolbarTextColor;
++        public int statusBarColor;
++        public int accent;
++    }
++
++    private SettingsStyler() {}
++
++    @NonNull
++    public static Style resolve(@NonNull Context context) {
++        android.content.SharedPreferences prefs = AppearanceManager.getPrefs(context);
++        String mode = prefs.getString(AppearanceManager.KEY_UI_MODE, MODE_TERMINAL);
++        int pageBackground = ThemeUtils.getSystemAttrColor(context, android.R.attr.colorBackground, 0xFFFFFFFF);
++
++        Style s = new Style();
++        if (MODE_TERMUX.equals(mode)) {
++            s.toolbarColor = TERMUX_TOOLBAR;
++            s.statusBarColor = TERMUX_STATUS_BAR;
++            s.toolbarTextColor = 0xFFFFFFFF;
++            s.accent = pickAccent(pageBackground, TERMUX_TOOLBAR);
++        } else if (MODE_CUSTOM.equals(mode)) {
++            Integer custom = ColorMath.parseHex(prefs.getString(AppearanceManager.KEY_UI_COLOR, DEFAULT_CUSTOM_COLOR));
++            int base = custom != null ? custom : ColorMath.parseHex(DEFAULT_CUSTOM_COLOR);
++            s.toolbarColor = base;
++            s.statusBarColor = ColorMath.scale(base, 0.85f);
++            s.toolbarTextColor = ColorMath.readableOn(base);
++            s.accent = pickAccent(pageBackground, base);
++        } else {
++            int bg = parse(AppearanceManager.getEffectiveColorHex("background"), 0xFF000000);
++            int fg = parse(AppearanceManager.getEffectiveColorHex("foreground"), 0xFFFFFFFF);
++            s.toolbarColor = bg;
++            s.statusBarColor = ColorMath.scale(bg, 0.85f);
++            s.toolbarTextColor = ColorMath.contrast(fg, bg) >= 4.5 ? fg : ColorMath.readableOn(bg);
++            int blue = parse(AppearanceManager.getEffectiveColorHex("color4"), 0xFF6495ED);
++            s.accent = pickAccent(pageBackground, blue,
++                parse(AppearanceManager.getEffectiveColorHex("color12"), blue),
++                parse(AppearanceManager.getEffectiveColorHex("color2"), blue),
++                parse(AppearanceManager.getEffectiveColorHex("color1"), blue),
++                fg, bg);
++        }
++        return s;
++    }
++
++    /** Picks the first candidate that is readable on the page background. */
++    private static int pickAccent(int pageBackground, int... candidates) {
++        for (int c : candidates) {
++            if (ColorMath.contrast(c, pageBackground) >= 2.0) return c | 0xFF000000;
++        }
++        // Nothing worked: black or white, whichever reads on this page.
++        return ColorMath.readableOn(pageBackground);
++    }
++
++    private static int parse(String hex, int fallback) {
++        Integer v = ColorMath.parseHex(hex);
++        return v != null ? v : fallback;
++    }
++
++    /** Colors the activity's top bar and status bar. Call after the toolbar has been set up. */
++    public static void apply(@NonNull final AppCompatActivity activity) {
++        final Style s = resolve(activity);
++
++        final Toolbar toolbar = activity.findViewById(com.termux.shared.R.id.toolbar);
++        if (toolbar != null) {
++            toolbar.setBackgroundColor(s.toolbarColor);
++            toolbar.setTitleTextColor(s.toolbarTextColor);
++            toolbar.setSubtitleTextColor(s.toolbarTextColor);
++            // The back arrow can be set a moment after onCreate, so tint it now and again once laid out.
++            tintNavigationIcon(toolbar, s.toolbarTextColor);
++            toolbar.post(new Runnable() {
++                @Override
++                public void run() {
++                    tintNavigationIcon(toolbar, s.toolbarTextColor);
++                }
++            });
++        }
++
++        Window window = activity.getWindow();
++        window.setStatusBarColor(s.statusBarColor);
++        new WindowInsetsControllerCompat(window, window.getDecorView())
++            .setAppearanceLightStatusBars(ColorMath.readableOn(s.statusBarColor) == 0xFF000000);
++    }
++
++    private static void tintNavigationIcon(Toolbar toolbar, int color) {
++        Drawable icon = toolbar.getNavigationIcon();
++        if (icon != null) {
++            icon.mutate().setColorFilter(color, PorterDuff.Mode.SRC_IN);
++        }
++    }
++
++    /**
++     * Tints switches and sliders on every preference screen shown in this activity, including
++     * screens opened later. The accent is read once here; changing the style recreates the activity.
++     */
++    public static void installFragmentTinting(@NonNull AppCompatActivity activity) {
++        final int accent = resolve(activity).accent;
++        activity.getSupportFragmentManager().registerFragmentLifecycleCallbacks(
++            new FragmentManager.FragmentLifecycleCallbacks() {
++                @Override
++                public void onFragmentViewCreated(@NonNull FragmentManager fm, @NonNull Fragment f,
++                                                  @NonNull View v, android.os.Bundle savedInstanceState) {
++                    if (!(f instanceof PreferenceFragmentCompat)) return;
++                    RecyclerView list = ((PreferenceFragmentCompat) f).getListView();
++                    if (list == null) return;
++                    list.addOnChildAttachStateChangeListener(new RecyclerView.OnChildAttachStateChangeListener() {
++                        @Override
++                        public void onChildViewAttachedToWindow(@NonNull View view) {
++                            tintTree(view, accent);
++                        }
++
++                        @Override
++                        public void onChildViewDetachedFromWindow(@NonNull View view) {}
++                    });
++                    for (int i = 0; i < list.getChildCount(); i++) tintTree(list.getChildAt(i), accent);
++                }
++            }, true);
++    }
++
++    public static void tintTree(@NonNull View view, int accent) {
++        if (view instanceof SwitchCompat) {
++            SwitchCompat sw = (SwitchCompat) view;
++            int[][] states = {{android.R.attr.state_checked}, {}};
++            sw.setThumbTintList(new ColorStateList(states, new int[]{accent, 0xFFBDBDBD}));
++            sw.setTrackTintList(new ColorStateList(states, new int[]{accent, 0xFF9E9E9E}));
++        } else if (view instanceof SeekBar) {
++            SeekBar bar = (SeekBar) view;
++            ColorStateList tint = ColorStateList.valueOf(accent);
++            bar.setProgressTintList(tint);
++            bar.setThumbTintList(tint);
++        }
++
++        if (view instanceof ViewGroup) {
++            ViewGroup group = (ViewGroup) view;
++            for (int i = 0; i < group.getChildCount(); i++) tintTree(group.getChildAt(i), accent);
++        }
++    }
++}
+diff --git a/app/src/main/java/com/termux/app/appearance/StableWallpaperView.java b/app/src/main/java/com/termux/app/appearance/StableWallpaperView.java
+new file mode 100644
+index 0000000..0ac392f
+--- /dev/null
++++ b/app/src/main/java/com/termux/app/appearance/StableWallpaperView.java
+@@ -0,0 +1,49 @@
++package com.termux.app.appearance;
++
++import android.content.Context;
++import android.util.AttributeSet;
++import android.widget.ImageView;
++
++import androidx.annotation.Nullable;
++
++/**
++ * An {@link ImageView} that never gets shorter once it has been measured tall.
++ *
++ * The terminal area shrinks when the on-screen keyboard opens, and a normal image view would
++ * re-crop (shrink) the wallpaper to fit. This view keeps the tallest height it has been given
++ * (the keyboard-down height) and lets its parent clip the part that falls behind the keyboard, so
++ * the wallpaper stays one size. The remembered height is reset when the width changes, which
++ * covers rotation.
++ */
++public class StableWallpaperView extends ImageView {
++
++    private int mStableHeight = 0;
++    private int mLastWidth = -1;
++
++    public StableWallpaperView(Context context) {
++        super(context);
++    }
++
++    public StableWallpaperView(Context context, @Nullable AttributeSet attrs) {
++        super(context, attrs);
++    }
++
++    public StableWallpaperView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
++        super(context, attrs, defStyleAttr);
++    }
++
++    @Override
++    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
++        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
++        int w = getMeasuredWidth();
++        int h = getMeasuredHeight();
++
++        if (w != mLastWidth) {
++            mLastWidth = w;
++            mStableHeight = 0;
++        }
++        if (h > mStableHeight) mStableHeight = h;
++
++        setMeasuredDimension(w, mStableHeight);
++    }
++}
+diff --git a/app/src/main/java/com/termux/app/fragments/settings/termux/AppearancePreferencesFragment.java b/app/src/main/java/com/termux/app/fragments/settings/termux/AppearancePreferencesFragment.java
+index 6419b49..e2ac807 100644
+--- a/app/src/main/java/com/termux/app/fragments/settings/termux/AppearancePreferencesFragment.java
++++ b/app/src/main/java/com/termux/app/fragments/settings/termux/AppearancePreferencesFragment.java
+@@ -17,6 +17,9 @@ import androidx.preference.SwitchPreferenceCompat;
+ 
+ import com.termux.R;
+ import com.termux.app.appearance.AppearanceManager;
++import com.termux.app.appearance.ColorMath;
++import com.termux.app.appearance.ColorPickerDialog;
++import com.termux.app.appearance.SettingsStyler;
+ 
+ import java.util.ArrayList;
+ import java.util.Locale;
+@@ -55,6 +58,7 @@ public class AppearancePreferencesFragment extends PreferenceFragmentCompat {
+         setUpWallpaper();
+         setUpFont();
+         setUpTheme();
++        setUpUiStyle();
+     }
+ 
+     @Override
+@@ -62,6 +66,7 @@ public class AppearancePreferencesFragment extends PreferenceFragmentCompat {
+         super.onResume();
+         // The custom colors screen may have changed the theme while we were in the background.
+         refreshThemeSummary();
++        refreshUiStyle();
+         refreshWallpaperSummary();
+         refreshFontSummary();
+     }
+@@ -271,6 +276,84 @@ public class AppearancePreferencesFragment extends PreferenceFragmentCompat {
+         }
+     }
+ 
++    // ---------------------------------------------------------------- settings look
++
++    private void setUpUiStyle() {
++        ListPreference mode = findPreference(AppearanceManager.KEY_UI_MODE);
++        if (mode != null) {
++            mode.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
++                @Override
++                public boolean onPreferenceChange(Preference preference, Object newValue) {
++                    refreshUiStyleEnabled((String) newValue);
++                    recreateSoon();
++                    return true;
++                }
++            });
++        }
++
++        Preference color = findPreference(AppearanceManager.KEY_UI_COLOR);
++        if (color != null) {
++            color.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
++                @Override
++                public boolean onPreferenceClick(Preference preference) {
++                    Integer current = ColorMath.parseHex(currentUiColorHex());
++                    ColorPickerDialog.show(requireContext(),
++                        getString(R.string.termux_appearance_ui_color_title),
++                        getString(R.string.termux_appearance_ui_color_description),
++                        current != null ? current : 0xFF5C6BC0,
++                        new ColorPickerDialog.Callback() {
++                            @Override
++                            public void onColorSelected(int rgb) {
++                                AppearanceManager.getPrefs(requireContext()).edit()
++                                    .putString(AppearanceManager.KEY_UI_COLOR, ColorMath.toHex(rgb)).apply();
++                                refreshUiStyle();
++                                recreateSoon();
++                            }
++                        });
++                    return true;
++                }
++            });
++        }
++        refreshUiStyle();
++    }
++
++    private String currentUiColorHex() {
++        return AppearanceManager.getPrefs(requireContext())
++            .getString(AppearanceManager.KEY_UI_COLOR, SettingsStyler.DEFAULT_CUSTOM_COLOR);
++    }
++
++    private void refreshUiStyle() {
++        if (getContext() == null) return;
++        refreshUiStyleEnabled(AppearanceManager.getPrefs(requireContext())
++            .getString(AppearanceManager.KEY_UI_MODE, SettingsStyler.MODE_TERMINAL));
++    }
++
++    /** The custom color only matters in Custom mode. */
++    private void refreshUiStyleEnabled(@Nullable String mode) {
++        Preference color = findPreference(AppearanceManager.KEY_UI_COLOR);
++        if (color == null) return;
++        boolean custom = SettingsStyler.MODE_CUSTOM.equals(mode);
++        color.setEnabled(custom);
++        color.setSummary(custom
++            ? currentUiColorHex()
++            : getString(R.string.termux_appearance_ui_color_summary));
++    }
++
++    /**
++     * Restarts the Settings screen so the new colors are applied everywhere. Posted so the changed
++     * preference has been saved first.
++     */
++    private void recreateSoon() {
++        final androidx.fragment.app.FragmentActivity activity = getActivity();
++        if (activity == null) return;
++        activity.getWindow().getDecorView().post(new Runnable() {
++            @Override
++            public void run() {
++                if (!activity.isFinishing()) activity.recreate();
++            }
++        });
++    }
++
+     /** "tokyo_night" -> "Tokyo Night". */
+     private static String prettify(String name) {
+         StringBuilder sb = new StringBuilder();
+diff --git a/app/src/main/java/com/termux/app/fragments/settings/termux/ColorsPreferencesFragment.java b/app/src/main/java/com/termux/app/fragments/settings/termux/ColorsPreferencesFragment.java
+index 62a40d7..a13c304 100644
+--- a/app/src/main/java/com/termux/app/fragments/settings/termux/ColorsPreferencesFragment.java
++++ b/app/src/main/java/com/termux/app/fragments/settings/termux/ColorsPreferencesFragment.java
+@@ -8,7 +8,6 @@ import android.widget.Toast;
+ 
+ import androidx.annotation.Keep;
+ import androidx.annotation.NonNull;
+-import androidx.preference.EditTextPreference;
+ import androidx.preference.Preference;
+ import androidx.preference.PreferenceCategory;
+ import androidx.preference.PreferenceFragmentCompat;
+@@ -16,15 +15,17 @@ import androidx.preference.PreferenceScreen;
+ 
+ import com.termux.R;
+ import com.termux.app.appearance.AppearanceManager;
+-import com.termux.terminal.TerminalColors;
+-import com.termux.terminal.TextStyle;
++import com.termux.app.appearance.ColorMath;
++import com.termux.app.appearance.ColorPickerDialog;
+ 
++import java.util.ArrayList;
+ import java.util.Map;
+ import java.util.TreeMap;
+ 
+ /**
+- * Edits foreground, background, cursor and the 16 ANSI colors. Changes are written straight to
+- * {@code ~/.termux/colors.properties}, on top of whatever theme preset is currently installed.
++ * Edits foreground, background, cursor and the 16 ANSI colors with a color wheel. Changes are
++ * written straight to {@code ~/.termux/colors.properties}, on top of whatever theme preset is
++ * currently installed.
+  */
+ @Keep
+ public class ColorsPreferencesFragment extends PreferenceFragmentCompat {
+@@ -51,36 +52,38 @@ public class ColorsPreferencesFragment extends PreferenceFragmentCompat {
+         category.setTitle(R.string.termux_appearance_colors_header);
+         screen.addPreference(category);
+ 
+-        for (final String key : AppearanceManager.getColorKeys()) {
+-            final EditTextPreference pref = new EditTextPreference(context);
++        ArrayList<String> keys = AppearanceManager.getColorKeys();
++        final String[] titles = getResources().getStringArray(R.array.termux_appearance_color_titles);
++        final String[] descriptions = getResources().getStringArray(R.array.termux_appearance_color_descriptions);
++
++        for (int i = 0; i < keys.size(); i++) {
++            final String key = keys.get(i);
++            final String title = i < titles.length ? titles[i] : key;
++            final String description = i < descriptions.length ? descriptions[i] : "";
++
++            final Preference pref = new Preference(context);
+             pref.setKey("color_edit_" + key);
+             pref.setPersistent(false);
+-            pref.setTitle(key);
+-            pref.setDialogTitle(key);
+-
+-            String hex = currentHex(key);
+-            pref.setText(hex);
+-            pref.setSummary(hex);
+-            pref.setIcon(swatch(context, hex));
+-            pref.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
++            pref.setTitle(title);
++            bind(context, pref, description, currentHex(key));
++
++            pref.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
+                 @Override
+-                public boolean onPreferenceChange(Preference preference, Object newValue) {
+-                    String value = newValue == null ? "" : ((String) newValue).trim();
+-                    if (!value.startsWith("#")) value = "#" + value;
+-                    if (!AppearanceManager.isValidHexColor(value)) {
+-                        Toast.makeText(context, R.string.termux_appearance_colors_invalid, Toast.LENGTH_SHORT).show();
+-                        return false;
+-                    }
+-                    value = value.toLowerCase(java.util.Locale.ROOT);
+-
+-                    mColors.put(key, value);
+-                    if (!AppearanceManager.writeColorProperties(context, mColors)) return false;
+-
+-                    pref.setText(value);
+-                    pref.setSummary(value);
+-                    pref.setIcon(swatch(context, value));
+-                    // We stored the normalised value ourselves, so do not let the preference store the raw input.
+-                    return false;
++                public boolean onPreferenceClick(Preference preference) {
++                    ColorPickerDialog.show(context, title, description, parse(currentHex(key)),
++                        new ColorPickerDialog.Callback() {
++                            @Override
++                            public void onColorSelected(int rgb) {
++                                String value = ColorMath.toHex(rgb);
++                                mColors.put(key, value);
++                                if (!AppearanceManager.writeColorProperties(context, mColors)) {
++                                    Toast.makeText(context, R.string.termux_appearance_colors_save_failed, Toast.LENGTH_SHORT).show();
++                                    return;
++                                }
++                                bind(context, pref, description, value);
++                            }
++                        });
++                    return true;
+                 }
+             });
+             category.addPreference(pref);
+@@ -104,20 +107,22 @@ public class ColorsPreferencesFragment extends PreferenceFragmentCompat {
+         screen.addPreference(reset);
+     }
+ 
++    /** Shows the description with the current hex value under the title, and a swatch as the icon. */
++    private static void bind(Context context, Preference pref, String description, String hex) {
++        pref.setSummary(description + "\n" + hex);
++        pref.setIcon(swatch(context, hex));
++    }
++
+     /** The color as it is set in the colors file, falling back to the app's current default for that slot. */
+     @NonNull
+     private String currentHex(@NonNull String key) {
+-        String fromFile = mColors.get(key);
+-        if (AppearanceManager.isValidHexColor(fromFile)) return fromFile.toLowerCase(java.util.Locale.ROOT);
+-
+-        int index;
+-        if (key.equals("foreground")) index = TextStyle.COLOR_INDEX_FOREGROUND;
+-        else if (key.equals("background")) index = TextStyle.COLOR_INDEX_BACKGROUND;
+-        else if (key.equals("cursor")) index = TextStyle.COLOR_INDEX_CURSOR;
+-        else index = Integer.parseInt(key.substring("color".length()));
++        Integer fromFile = ColorMath.parseHex(mColors.get(key));
++        return fromFile != null ? ColorMath.toHex(fromFile) : AppearanceManager.defaultColorHex(key);
++    }
+ 
+-        int argb = TerminalColors.COLOR_SCHEME.mDefaultColors[index];
+-        return String.format("#%06x", argb & 0xFFFFFF);
++    private static int parse(String hex) {
++        Integer v = ColorMath.parseHex(hex);
++        return v != null ? v : 0xFF000000;
+     }
+ 
+     private static GradientDrawable swatch(Context context, String hex) {
+diff --git a/app/src/main/java/com/termux/app/terminal/io/TerminalToolbarViewPager.java b/app/src/main/java/com/termux/app/terminal/io/TerminalToolbarViewPager.java
+index a526570..a8df35f 100644
+--- a/app/src/main/java/com/termux/app/terminal/io/TerminalToolbarViewPager.java
++++ b/app/src/main/java/com/termux/app/terminal/io/TerminalToolbarViewPager.java
+@@ -11,6 +11,7 @@ import androidx.viewpager.widget.ViewPager;
+ 
+ import com.termux.R;
+ import com.termux.app.TermuxActivity;
++import com.termux.app.appearance.AppearanceManager;
+ import com.termux.shared.termux.extrakeys.ExtraKeysView;
+ import com.termux.terminal.TerminalSession;
+ 
+@@ -49,6 +50,7 @@ public class TerminalToolbarViewPager {
+                 mActivity.setExtraKeysView(extraKeysView);
+                 extraKeysView.reload(mActivity.getTermuxTerminalExtraKeys().getExtraKeysInfo(),
+                     mActivity.getTerminalToolbarDefaultHeight());
++                AppearanceManager.applyExtraKeysStyle(mActivity);
+ 
+                 // apply extra keys fix if enabled in prefs
+                 if (mActivity.getProperties().isUsingFullScreen() && mActivity.getProperties().isUsingFullScreenWorkAround()) {
+diff --git a/app/src/main/res/layout/activity_termux.xml b/app/src/main/res/layout/activity_termux.xml
+index d13bd52..abae122 100644
+--- a/app/src/main/res/layout/activity_termux.xml
++++ b/app/src/main/res/layout/activity_termux.xml
+@@ -29,7 +29,7 @@
+                 android:layout_height="match_parent">
+ 
+                 <!-- Optional wallpaper, shown behind the terminal. Hidden unless enabled in Appearance settings. -->
+-                <ImageView
++                <com.termux.app.appearance.StableWallpaperView
+                     android:id="@+id/terminal_wallpaper_view"
+                     android:layout_width="match_parent"
+                     android:layout_height="match_parent"
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 9bbe22c..80202a3 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -265,6 +265,16 @@
+     <string name="termux_appearance_custom_colors_summary">Foreground, background, cursor and the 16 ANSI colors</string>
+     <string name="termux_appearance_colors_reset_title">Reset colors to default</string>
+     <string name="termux_appearance_colors_invalid">Use the format #rrggbb</string>
+-    <string name="termux_appearance_colors_header">Colors (hex, #rrggbb)</string>
++    <string name="termux_appearance_colors_header">Tap a color to change it</string>
++
++    <string name="termux_appearance_colors_save_failed">Could not save the color</string>
++
++    <string name="termux_appearance_ui_header">Settings look</string>
++    <string name="termux_appearance_ui_mode_title">Settings color</string>
++    <string name="termux_appearance_ui_color_title">Custom settings color</string>
++    <string name="termux_appearance_ui_color_summary">Color of the top bar and of switches and sliders. Used when Settings color is Custom color.</string>
++    <string name="termux_appearance_ui_color_description">Top bar color for the Settings screens. Switches and sliders use it too.</string>
++
++    <string name="termux_appearance_picker_brightness">Brightness</string>
+ 
+ </resources>
+diff --git a/app/src/main/res/values/termux_appearance_arrays.xml b/app/src/main/res/values/termux_appearance_arrays.xml
+new file mode 100644
+index 0000000..6be0989
+--- /dev/null
++++ b/app/src/main/res/values/termux_appearance_arrays.xml
+@@ -0,0 +1,62 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++
++    <!-- Order must match AppearanceManager.getColorKeys():
++         foreground, background, cursor, then color0 to color15. -->
++    <string-array name="termux_appearance_color_titles">
++        <item>Text (foreground)</item>
++        <item>Background</item>
++        <item>Cursor</item>
++        <item>Black (color0)</item>
++        <item>Red (color1)</item>
++        <item>Green (color2)</item>
++        <item>Yellow (color3)</item>
++        <item>Blue (color4)</item>
++        <item>Magenta (color5)</item>
++        <item>Cyan (color6)</item>
++        <item>White (color7)</item>
++        <item>Bright black (color8)</item>
++        <item>Bright red (color9)</item>
++        <item>Bright green (color10)</item>
++        <item>Bright yellow (color11)</item>
++        <item>Bright blue (color12)</item>
++        <item>Bright magenta (color13)</item>
++        <item>Bright cyan (color14)</item>
++        <item>Bright white (color15)</item>
++    </string-array>
++
++    <string-array name="termux_appearance_color_descriptions">
++        <item>Default text color: what you type and most program output.</item>
++        <item>Terminal background, behind the text. With a wallpaper on, the wallpaper shows instead wherever this color would be.</item>
++        <item>The blinking block or bar that shows where you are typing.</item>
++        <item>Normal black. Used by programs for dark text and shadows, and as a background for status bars.</item>
++        <item>Errors and failures, deleted lines in diffs, and archives in ls.</item>
++        <item>Success and OK messages, added lines in diffs, and executable files in ls.</item>
++        <item>Warnings, modified files and highlights.</item>
++        <item>Directories in ls, links and informational text. Often the hardest color to read on dark themes.</item>
++        <item>Special files, keywords in code editors and prompt decorations.</item>
++        <item>Symbolic links in ls, strings in code and informational text.</item>
++        <item>Normal light gray text. Many programs use this instead of the default text color.</item>
++        <item>Dark gray: comments in code, hints, and dimmed or disabled text.</item>
++        <item>Brighter red: bold or emphasized errors.</item>
++        <item>Brighter green: bold or emphasized success, and bold executables.</item>
++        <item>Brighter yellow: bold warnings and strong highlights.</item>
++        <item>Brighter blue: bold directories in ls and bold links.</item>
++        <item>Brighter magenta: bold special files and emphasized keywords.</item>
++        <item>Brighter cyan: bold symbolic links and emphasized strings.</item>
++        <item>Pure white: bold text and emphasized output.</item>
++    </string-array>
++
++    <string-array name="termux_appearance_ui_mode_entries">
++        <item>Match terminal theme</item>
++        <item>Termux red (original)</item>
++        <item>Custom color</item>
++    </string-array>
++
++    <string-array name="termux_appearance_ui_mode_values">
++        <item>terminal</item>
++        <item>termux</item>
++        <item>custom</item>
++    </string-array>
++
++</resources>
+diff --git a/app/src/main/res/xml/termux_appearance_preferences.xml b/app/src/main/res/xml/termux_appearance_preferences.xml
+index c4300cc..1ef9d89 100644
+--- a/app/src/main/res/xml/termux_appearance_preferences.xml
++++ b/app/src/main/res/xml/termux_appearance_preferences.xml
+@@ -76,4 +76,24 @@
+ 
+     </PreferenceCategory>
+ 
++    <PreferenceCategory
++        app:key="ui"
++        app:title="@string/termux_appearance_ui_header">
++
++        <ListPreference
++            app:key="ui_style_mode"
++            app:defaultValue="terminal"
++            app:entries="@array/termux_appearance_ui_mode_entries"
++            app:entryValues="@array/termux_appearance_ui_mode_values"
++            app:title="@string/termux_appearance_ui_mode_title"
++            app:useSimpleSummaryProvider="true" />
++
++        <Preference
++            app:key="ui_custom_color"
++            app:persistent="false"
++            app:title="@string/termux_appearance_ui_color_title"
++            app:summary="@string/termux_appearance_ui_color_summary" />
++
++    </PreferenceCategory>
++
+ </PreferenceScreen>
+diff --git a/termux-shared/src/main/java/com/termux/shared/termux/extrakeys/ExtraKeysView.java b/termux-shared/src/main/java/com/termux/shared/termux/extrakeys/ExtraKeysView.java
+index 4fbbf1e..53123cf 100644
+--- a/termux-shared/src/main/java/com/termux/shared/termux/extrakeys/ExtraKeysView.java
++++ b/termux-shared/src/main/java/com/termux/shared/termux/extrakeys/ExtraKeysView.java
+@@ -411,6 +411,9 @@ public final class ExtraKeysView extends GridLayout {
+ 
+                 button.setText(buttonInfo.getDisplay());
+                 button.setTextColor(mButtonTextColor);
++                // Start in the same state a button returns to when released, so a key that has
++                // never been pressed looks identical to one that has.
++                button.setBackgroundColor(mButtonBackgroundColor);
+                 button.setAllCaps(mButtonTextAllCaps);
+                 button.setPadding(0, 0, 0, 0);
+ 
+-- 
+2.43.0
+
